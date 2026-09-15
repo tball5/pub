@@ -1099,13 +1099,14 @@ function buildScreens() {
 // Beams sit at z = -4.8, -2.4, 0, 2.4, 4.8, so the side walls have four 2.1m bays.
 const TV_W = 2.0, TV_Y = 2.70;
 [-3.6, -1.2, 1.2, 3.6].forEach(z => {
-  tv(-W / 2 + 0.09, TV_Y, z,  Math.PI / 2, TV_W);
-  tv( W / 2 - 0.09, TV_Y, z, -Math.PI / 2, TV_W);
+  if (z !== -1.2) tv(-W / 2 + 0.09, TV_Y, z, Math.PI / 2, TV_W);  // -1.2 is over the jukebox
+  tv(W / 2 - 0.09, TV_Y, z, -Math.PI / 2, TV_W);
 });
 [-5.4, -3.0, 3.0, 5.4].forEach(x => tv(x, TV_Y, D / 2 - 0.09, Math.PI, TV_W));
 
 const PANEL = 1.96;
 for (let i = 0; i < 8; i++) {
+  if (i === 7) continue;                   // corner booth below - strider sits under it
   tv(-PANEL * 3.5 + i * PANEL, 2.97, -D / 2 + 0.09, 0, PANEL, 0.02);
 }
 
@@ -1444,7 +1445,7 @@ const HOLO_VERT = `
 const HOLO_FRAG = `
   uniform sampler2D uMap;
   uniform vec3 uKey, uTint;
-  uniform float uTol, uSoft, uTime, uOpacity, uFlicker;
+  uniform float uTol, uSoft, uTime, uOpacity, uFlicker, uFade;
   uniform vec2 uParallax;
   varying vec2 vUv;
 
@@ -1481,8 +1482,8 @@ const HOLO_FRAG = `
     col += vec3(0.9, 0.95, 1.0) * sweep * 0.12;                     // rising band
 
     a *= uOpacity * uFlicker;
-    a *= smoothstep(0.0, 0.10, vUv.y);
-    gl_FragColor = vec4(col, a);
+    if (uFade > 0.001) a *= smoothstep(0.0, uFade, vUv.y);   // dissolve at the base
+    gl_FragColor = vec4(clamp(col, 0.0, 1.0), clamp(a, 0.0, 1.0));
   }`;
 
 function createHologram(opt) {
@@ -1502,8 +1503,9 @@ function createHologram(opt) {
     uTol:      { value: opt.keyTol === undefined ? 0.30 : opt.keyTol },
     uSoft:     { value: 0.12 },
     uTime:     { value: 0 },
-    uOpacity:  { value: 0.94 },
+    uOpacity:  { value: opt.opacity === undefined ? 0.94 : opt.opacity },
     uFlicker:  { value: 1 },
+    uFade:     { value: opt.fade === undefined ? 0.10 : opt.fade },
     uParallax: { value: new THREE.Vector2() },
     uTint:     { value: new THREE.Vector3().fromArray(TINT) }
   };
@@ -1514,11 +1516,16 @@ function createHologram(opt) {
   });
 
   const body = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mkMat(THREE.NormalBlending));
-  const aura = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mkMat(THREE.AdditiveBlending));
-  aura.material.uniforms.uOpacity.value = 0.10;   // barely-there halo
-  aura.position.z = -0.05;
-  const mats = [body.material, aura.material];
-  g.add(aura, body);
+  const mats = [body.material];
+  let aura = null;
+  if (opt.aura !== false) {
+    aura = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mkMat(THREE.AdditiveBlending));
+    aura.material.uniforms.uOpacity.value = 0.10;   // barely-there halo
+    aura.position.z = -0.05;
+    mats.push(aura.material);
+    g.add(aura);
+  }
+  g.add(body);
 
   let pool = null;
   if (opt.pool !== false) {
@@ -1550,9 +1557,11 @@ function createHologram(opt) {
   function fit(img) {
     const w = HEIGHT * (img.width / img.height);
     body.scale.set(w, HEIGHT, 1);
-    aura.scale.set(w * 1.05, HEIGHT * 1.05, 1);
     body.position.y = BASE + HEIGHT / 2;
-    aura.position.y = BASE + HEIGHT / 2;
+    if (aura) {
+      aura.scale.set(w * 1.05, HEIGHT * 1.05, 1);
+      aura.position.y = BASE + HEIGHT / 2;
+    }
   }
   function autoKey(img) {
     if (opt.keyColor) return new THREE.Vector3().fromArray(opt.keyColor);
@@ -1639,6 +1648,9 @@ const PATRON = createHologram({
   facing: 0,               // fixed, looking straight out of the booth
   clamp: 0,                // never turns
   parallax: 0.045,
+  opacity: 1.0,            // fully solid, not a see-through projection
+  fade: 0,                 // no dissolve across his lap
+  aura: false,             // the additive halo was washing him out
   pool: false, lamp: false,
   placeholder: 'sit'
 });

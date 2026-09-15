@@ -507,21 +507,8 @@ TABLES.forEach(([x, z]) => table(x, z));
 // ---------------------------------------------------------------- booths
 const BOOTH_W = 1.9, BOOTH_D = 1.7;   // width along the wall, depth out from it
 
-const BOOTH_POOL = new THREE.PlaneGeometry(1.15, 0.95);
-const BOOTH_POOL_MAT = (() => {
-  const c = document.createElement('canvas'); c.width = c.height = 64;
-  const x = c.getContext('2d');
-  const gr = x.createRadialGradient(32, 32, 1, 32, 32, 31);
-  gr.addColorStop(0, 'rgba(255,196,138,0.75)');
-  gr.addColorStop(1, 'rgba(255,196,138,0)');
-  x.fillStyle = gr; x.fillRect(0, 0, 64, 64);
-  return new THREE.MeshBasicMaterial({
-    map: new THREE.CanvasTexture(c), transparent: true,
-    blending: THREE.AdditiveBlending, depthWrite: false
-  });
-})();
-
 const BOOTH_GROUPS = [];
+const BOOTH_LAMPS = [0, 3, 6, 7];
 function booth(x, z, ry, i, sides) {
   const g = new THREE.Group();
   const accent = i % 2 ? glowV : glow;
@@ -542,15 +529,12 @@ function booth(x, z, ry, i, sides) {
   const puck = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 10), glowA);
   puck.position.set(0, 0.85, -0.1);
   g.add(puck);
-  // An unlit disc fakes the lamp pooling on the table - costs nothing per pixel.
-  const disc = new THREE.Mesh(BOOTH_POOL, BOOTH_POOL_MAT);
-  disc.rotation.x = -Math.PI / 2;
-  disc.position.set(0, 0.79, -0.1);
-  g.add(disc);
-  // Only every other booth carries an actual light; the discs cover the rest.
-  if (i % 2 === 0) {
-    const lamp = new THREE.PointLight(0xffc48a, 0.95, 3.0, 2);
-    lamp.position.set(0, 1.55, -0.1);
+  // Four lamps placed so every booth is covered: 3 sits between 2 and 4 on the
+  // right wall, 0 reaches 1 on the left, and the two entry booths are far apart
+  // enough to need their own. The corner is left dark on purpose - Strider's.
+  if (BOOTH_LAMPS.indexOf(i) >= 0) {
+    const lamp = new THREE.PointLight(0xffc48a, 1.35, 4.5, 2);
+    lamp.position.set(0, 1.62, -0.1);
     g.add(lamp);
   }
   g.position.set(x, 0, z);
@@ -1833,8 +1817,8 @@ const SRV_HIP = 0.86;                       // shorter than the regulars' 0.92
 const SRV = {
   // profile spun around the vertical axis: hip -> pinched waist -> bust -> shoulder
   torso: new THREE.LatheGeometry([
-    [0.152, 0.000], [0.170, 0.070], [0.130, 0.150], [0.094, 0.215],
-    [0.126, 0.272], [0.148, 0.322], [0.128, 0.400], [0.100, 0.478], [0.074, 0.550]
+    [0.152, 0.000], [0.172, 0.070], [0.110, 0.150], [0.076, 0.215],
+    [0.114, 0.272], [0.150, 0.322], [0.128, 0.400], [0.100, 0.478], [0.074, 0.550]
   ].map(([r, y]) => new THREE.Vector2(r, y)), 16),
   skirt: new THREE.LatheGeometry([
     [0.168, 0.00], [0.190, -0.10], [0.214, -0.20], [0.220, -0.24]
@@ -1858,7 +1842,16 @@ function boothStop(i) {
   return { x: bx + Math.sin(ry) * 1.4, z: bz + Math.cos(ry) * 1.4, face: ry + Math.PI };
 }
 
-function makeServer(servedBooths) {
+// The two chairs sit on the +36 and +216 degree diagonals, so she comes at the
+// table from 126 degrees, far enough out to clear both chairs.
+function tableStop(t) {
+  const [tx, tz] = TABLES[t];
+  const a = Math.PI * 0.7;
+  const x = tx + Math.cos(a) * 1.55, z = tz + Math.sin(a) * 1.55;
+  return { x, z, face: Math.atan2(tx - x, tz - z) };
+}
+
+function makeServer(servedBooths, servedTables) {
   const root = new THREE.Group();
   const body = new THREE.Group();
   root.add(body);
@@ -1906,12 +1899,16 @@ function makeServer(servedBooths) {
 
   const wps = [];
   const go = (x, z, face) => wps.push({ x, z, face: face === undefined ? null : face });
-  go(-5.8, -4.35); go(2.9, -4.35); go(4.4, -3.60); go(4.6, -1.60);   // behind the bar and round
+  // The bar's top slab overhangs to x -6.70..3.70 and back to z -4.025, so she
+  // runs behind it, clears the end square, and only then turns out to the floor.
+  go(-5.9, -4.45); go(4.25, -4.45); go(4.25, -1.60);
   walls.right.forEach(i => { const st = boothStop(i); go(st.x, st.z, st.face); });
   walls.entry.forEach(i => { const st = boothStop(i); go(st.x, st.z, st.face); });
-  if (walls.left.length) go(-2.0, 3.70);                             // across the top
+  if (walls.left.length || servedTables.length) go(-2.0, 3.70);      // across the top
+  servedTables.forEach(t => { const st = tableStop(t); go(st.x, st.z, st.face); });
   walls.left.forEach(i => { const st = boothStop(i); go(st.x, st.z, st.face); });
-  go(-6.1, -1.00); go(-6.9, -3.70);                                  // back behind the bar
+  // back down the left, stepping wide of the bar's other corner and the jukebox
+  go(-6.10, -2.10); go(-7.20, -2.60); go(-7.20, -4.45);
 
   const segs = []; let total = 0;
   for (let k = 0; k < wps.length; k++) {
@@ -1959,22 +1956,23 @@ function updateServer(av, dt, t) {
     const target = Math.atan2(seg.b.x - seg.a.x, seg.b.z - seg.a.z);
     let d = target - av.root.rotation.y;
     d = Math.atan2(Math.sin(d), Math.cos(d));
-    av.root.rotation.y += d * Math.min(1, dt * 5);
+    av.root.rotation.y += d * Math.min(1, dt * 3.6);
 
-    av.phase += dt * av.speed * 5.4;
+    av.phase += dt * av.speed * 5.0;
     const sw = Math.sin(av.phase);
-    av.hipL.rotation.x = sw * 0.46;  av.hipR.rotation.x = -sw * 0.46;
+    // short, even steps: the legs stay under her rather than reaching out
+    av.hipL.rotation.x = sw * 0.26;  av.hipR.rotation.x = -sw * 0.26;
     // positive knee rotation folds the shin backwards, which is the way a knee goes
-    av.kneeL.rotation.x = Math.max(0, sw) * 0.8;
-    av.kneeR.rotation.x = Math.max(0, -sw) * 0.8;
-    av.armL.rotation.x = sw * 0.34;   av.armL.rotation.z = 0.1;
-    av.armR.rotation.x = -sw * 0.34;  av.armR.rotation.z = -0.1;
-    av.body.position.y = Math.abs(Math.cos(av.phase)) * 0.026;
-    av.body.position.x = sw * 0.02;
-    av.body.rotation.z = -sw * 0.05;
+    av.kneeL.rotation.x = Math.max(0, sw) * 0.34;
+    av.kneeR.rotation.x = Math.max(0, -sw) * 0.34;
+    av.armL.rotation.x = sw * 0.16;   av.armL.rotation.z = 0.09;
+    av.armR.rotation.x = -sw * 0.16;  av.armR.rotation.z = -0.09;
+    av.body.position.y = Math.abs(Math.cos(av.phase)) * 0.012;
+    av.body.position.x = sw * 0.006;     // almost no side-to-side
+    av.body.rotation.z = -sw * 0.015;
     av.body.rotation.x = 0;
-    av.tail.rotation.z = -sw * 0.18;
-    av.tail.rotation.x = 0.35 + Math.abs(sw) * 0.12;
+    av.tail.rotation.z = -sw * 0.08;
+    av.tail.rotation.x = 0.35 + Math.abs(sw) * 0.05;
 
     // arriving at a waypoint that is a table means stopping there
     const reached = av.segs.find(sg => sg.start > prev && sg.start <= av.dist);
@@ -2053,7 +2051,24 @@ function buildAvatars() {
     av.restL = -0.86;
     avatars.push(av);
   }
-  avatars.push(makeServer(served));
+  // two at the round table on the jukebox side
+  const servedTables = [];
+  const CHAIR_HIP = 0.58;                    // chair seat is 0.50
+  [['#b98cff', 0], ['#ff6ed2', 1]].forEach(([c, a], i) => {
+    if (touch && i > 0) return;
+    const [tx, tz] = TABLES[0];
+    const ang = a * Math.PI + Math.PI / 5;   // matches how the chairs are placed
+    const av = makeAvatar(c, { seated: true, hip: CHAIR_HIP });
+    av.mode = 'sit';
+    av.root.position.set(tx + Math.cos(ang), 0, tz + Math.sin(ang));
+    av.root.rotation.y = -ang - Math.PI / 2; // facing the table, same as the chair
+    av.restR = -0.89;                        // glass on the tabletop at 0.775
+    av.restL = -0.84;
+    avatars.push(av);
+    if (servedTables.indexOf(0) < 0) servedTables.push(0);
+  });
+
+  avatars.push(makeServer(served, servedTables));
   updateAvatars(0, 0);
 }
 

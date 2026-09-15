@@ -5,8 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Pub</title>
 <style>
-  html, body { margin:0; height:100%; overflow:hidden; background:#03040a; }
-  canvas { display:block; }
+  html, body {
+    margin:0; height:100%; overflow:hidden; background:#03040a;
+    user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
+  }
+  canvas { display:block; -webkit-user-drag:none; touch-action:none; }
   #hud {
     position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
     background:radial-gradient(ellipse at center, rgba(22,14,8,.74), rgba(6,4,3,.94));
@@ -1231,8 +1234,9 @@ const knob   = document.getElementById('knob');
 
 let yaw = 0;            // 0 looks down -Z, straight at the bar
 let pitch = 0;
+let yawT = 0, pitchT = 0;   // input writes here; the camera eases toward it
 const PITCH_MAX = 1.45;
-const clampPitch = () => { pitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, pitch)); };
+const clampPitch = () => { pitchT = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, pitchT)); };
 
 let started = false, rainLive = false, panelOpen = false;
 let dragging = false, lastX = 0, lastY = 0, downX = 0, downY = 0, slip = 0;
@@ -1259,22 +1263,27 @@ function setNDC(cx, cy) {
   mouseNDC.set((cx - r.left) / r.width * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
 }
 canvas.addEventListener('mousedown', e => {
+  e.preventDefault();                 // no native image/text drag mid-look
   dragging = true; slip = 0;
   lastX = downX = e.clientX; lastY = downY = e.clientY;
-  canvas.style.cursor = 'grabbing';
+  setCursor('grabbing');
 });
 addEventListener('mousemove', e => {
   setNDC(e.clientX, e.clientY);
   lastPX = e.clientX; lastPY = e.clientY;
   if (!dragging) return;
-  yaw   += (e.clientX - lastX) * 0.005;
-  pitch += (e.clientY - lastY) * 0.005;
-  slip  += Math.abs(e.clientX - lastX) + Math.abs(e.clientY - lastY);
+  yawT   += (e.clientX - lastX) * 0.005;
+  pitchT += (e.clientY - lastY) * 0.005;
+  slip   += Math.abs(e.clientX - lastX) + Math.abs(e.clientY - lastY);
   lastX = e.clientX; lastY = e.clientY;
   clampPitch();
 });
-addEventListener('mouseup', () => { dragging = false; canvas.style.cursor = 'grab'; });
-canvas.style.cursor = 'grab';
+addEventListener('mouseup', () => { dragging = false; setCursor('grab'); });
+
+// writing cursor/label styles every frame causes style recalcs, so only on change
+let curCursor = '';
+function setCursor(c) { if (c !== curCursor) { curCursor = c; canvas.style.cursor = c; } }
+setCursor('grab');
 
 canvas.addEventListener('click', e => {
   if (!started) return enter();
@@ -1327,8 +1336,8 @@ canvas.addEventListener('touchstart', e => {
 canvas.addEventListener('touchmove', e => {
   for (const t of e.changedTouches) {
     if (t.identifier !== lookId) continue;
-    yaw   += (t.clientX - lastX) * 0.006;
-    pitch += (t.clientY - lastY) * 0.006;
+    yawT   += (t.clientX - lastX) * 0.006;
+    pitchT += (t.clientY - lastY) * 0.006;
     slip  += Math.abs(t.clientX - lastX) + Math.abs(t.clientY - lastY);
     lastX = t.clientX; lastY = t.clientY;
     clampPitch();
@@ -1546,9 +1555,12 @@ function createHologram(opt) {
 }
 
 // ---- the bartender, standing behind the bar ----------------------------
+// bar top surface sits at 1.22, so the image starts just below it and
+// finishes just under the video wall at 2.42
 const BARTENDER = createHologram({
   src: 'ejak.jpg',
-  height: 1.92, base: 0, pos: [-0.4, -4.55],
+  height: 1.35, base: 1.05, pos: [-0.4, -4.55],
+  pool: false,             // he is floating now, so no pool on the floor
   placeholder: 'stand'
 });
 
@@ -1556,11 +1568,11 @@ const BARTENDER = createHologram({
 // bench centre works out to x 7.10, backrest at z -5.90
 const PATRON = createHologram({
   src: 'strider.jpg',
-  height: 1.06,            // seat cushion to top of head
-  base: 0.52,              // cushion height
-  pos: [7.12, -5.68],
-  facing: 0,               // looking out of the booth, back to the wall
-  clamp: 0.45,             // only a small turn; he is wedged into a corner
+  height: 1.55,            // bottom of the image to the top of his head
+  base: 0.42,              // just under the bench cushion
+  pos: [7.12, -5.66],
+  facing: 0,               // fixed, looking straight out of the booth
+  clamp: 0,                // never turns
   parallax: 0.045,
   pool: false, lamp: false,
   placeholder: 'sit'
@@ -1634,7 +1646,8 @@ function lookingAtJukebox() {
 // ---------------------------------------------------------------- loop
 const velocity = new THREE.Vector3();
 const clock = new THREE.Clock();
-let elapsed = 0, repaint = 0, rainTick = 0;
+let elapsed = 0, repaint = 0, rainTick = 0, hoverTick = 0;
+let hovering = false;
 
 function animate() {
   requestAnimationFrame(animate);
@@ -1655,15 +1668,26 @@ function animate() {
   BARTENDER.update(elapsed, dt);
   PATRON.update(elapsed, dt);
 
-  if (started && !panelOpen && !touch) {
-    const aim = lookingAtJukebox();
-    prompt.style.display = aim ? 'block' : 'none';
+  // hover test a few times a second rather than every frame
+  hoverTick += dt;
+  if (started && !panelOpen && !touch && hoverTick > 0.1) {
+    hoverTick = 0;
+    const aim = !dragging && lookingAtJukebox();
+    if (aim !== hovering) {
+      hovering = aim;
+      prompt.style.display = aim ? 'block' : 'none';
+    }
     if (aim) {
       prompt.style.left = (lastPX + 18) + 'px';
       prompt.style.top  = (lastPY + 16) + 'px';
-      if (!dragging) canvas.style.cursor = 'pointer';
-    } else if (!dragging) canvas.style.cursor = 'grab';
+    }
+    if (!dragging) setCursor(aim ? 'pointer' : 'grab');
   }
+
+  // ease the view toward whatever the drag asked for
+  const ease = 1 - Math.pow(0.0000001, dt);
+  yaw += (yawT - yaw) * ease;
+  pitch += (pitchT - pitch) * ease;
 
   // screens only need ~12fps, which keeps the canvas work off the critical path
   repaint += dt;

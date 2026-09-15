@@ -74,7 +74,7 @@
 <div id="hud"><div class="panel">
   <h1>THE PUB</h1>
   <p>every game &middot; every night</p>
-  <p class="keys">click to step inside<br>W A S D or scroll to walk &middot; drag to look<br>arrow keys look &middot; R runs the rain<br>click the jukebox (or press J) for the music</p>
+  <p class="keys">click to step inside<br>W A S D or scroll to walk &middot; mouse to look<br>arrow keys look &middot; R runs the rain<br>click the jukebox (or press J) for the music</p>
 </div></div>
 <div id="hint">esc to release the mouse</div>
 <div id="cross"></div>
@@ -1227,6 +1227,13 @@ addEventListener('keydown', e => {
   keys[e.code] = true;
   if (swallow.includes(e.code)) e.preventDefault();
   if (e.code === 'KeyR' && !e.repeat) rainLive = !rainLive;
+  if (e.code === 'KeyM' && !e.repeat && dragMode) {
+    mouseLook = !mouseLook;
+    hint.textContent = mouseLook
+      ? 'move the mouse to look \u00b7 M for drag-only'
+      : 'drag to look \u00b7 M for mouse steering';
+    canvas.style.cursor = mouseLook ? 'crosshair' : 'grab';
+  }
 });
 addEventListener('keyup',   e => { keys[e.code] = false; });
 
@@ -1234,6 +1241,8 @@ let yaw = 0;            // 0 looks down -Z, straight at the bar
 let pitch = 0;          // clamped just short of straight up / straight down
 const PITCH_MAX = 1.45;
 let rainLive = false;   // wall rain starts frozen
+let mouseLook = true;   // steer by cursor position when pointer lock is unavailable
+let overCanvas = false;
 let started = false, dragMode = false, dragging = false, lastX = 0, lastY = 0;
 let lastDownX = 0, lastDownY = 0;
 const clampPitch = () => { pitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, pitch)); };
@@ -1242,9 +1251,9 @@ const locked = () => document.pointerLockElement === canvas;
 
 function useDrag() {
   if (dragMode) return;
-  dragMode = true;
-  hint.textContent = 'drag the mouse to look around';
-  canvas.style.cursor = 'grab';
+  dragMode = true;                       // this browser or frame won't release the cursor
+  hint.textContent = 'move the mouse to look \u00b7 M for drag-only';
+  canvas.style.cursor = 'crosshair';
 }
 
 function enter() {
@@ -1266,8 +1275,12 @@ canvas.addEventListener('click', e => {
   if (panelOpen) return;
   const slipped = Math.abs(e.clientX - lastDownX) + Math.abs(e.clientY - lastDownY);
   if (!locked() && slipped > 6) return;       // that was a look-around drag, not a click
-  if (lookingAtJukebox()) openPanel();
+  if (lookingAtJukebox()) return openPanel();
+  // lock may have been refused the first time; a later click can still win it
+  if (!locked() && canvas.requestPointerLock) canvas.requestPointerLock();
 });
+canvas.addEventListener('mouseenter', () => { overCanvas = true; });
+canvas.addEventListener('mouseleave', () => { overCanvas = false; });
 document.addEventListener('pointerlockerror', useDrag);
 document.addEventListener('pointerlockchange', () => {
   if (locked()) {
@@ -1351,7 +1364,9 @@ const HOLO_FRAG = `
 
   float keyed(vec2 uv) {
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return 0.0;
-    return smoothstep(uTol, uTol + uSoft, distance(texture2D(uMap, uv).rgb, uKey));
+    vec4 t = texture2D(uMap, uv);
+    // a PNG's own alpha wins; a JPG has none, so the colour key does the work
+    return t.a * smoothstep(uTol, uTol + uSoft, distance(t.rgb, uKey));
   }
   float hash(float n) { return fract(sin(n) * 43758.5453); }
 
@@ -1521,7 +1536,7 @@ function createHologram(opt) {
 
 // ---- the bartender, standing behind the bar ----------------------------
 const BARTENDER = createHologram({
-  src: 'bartender.jpg',
+  src: 'ejak.jpg',
   height: 1.92, base: 0, pos: [-0.4, -4.55],
   placeholder: 'stand'
 });
@@ -1529,7 +1544,7 @@ const BARTENDER = createHologram({
 // ---- the regular, sitting in the corner booth with his back to the wall -
 // bench centre works out to x 7.10, backrest at z -5.90
 const PATRON = createHologram({
-  src: 'patron.png',
+  src: 'strider.jpg',
   height: 1.06,            // seat cushion to top of head
   base: 0.52,              // cushion height
   pos: [7.12, -5.68],
@@ -1651,7 +1666,17 @@ function animate() {
   if (started && !panelOpen) {
     aiming = lookingAtJukebox();
     prompt.style.display = aiming ? 'block' : 'none';
-    cross.style.display = locked() ? 'block' : 'none';
+    cross.style.display = (locked() || (dragMode && mouseLook)) ? 'block' : 'none';
+
+    // no pointer lock: steer from how far the cursor sits off centre, with a
+    // dead zone in the middle so the view holds still while you aim at things
+    if (dragMode && mouseLook && overCanvas && !dragging) {
+      const DEAD = 0.22;
+      const off = v => Math.abs(v) > DEAD ? (v - Math.sign(v) * DEAD) / (1 - DEAD) : 0;
+      yaw -= off(mouseNDC.x) * 2.0 * dt;
+      pitch += off(mouseNDC.y) * 1.2 * dt;
+      clampPitch();
+    }
   }
 
   // screens only need ~12fps, which keeps the canvas work off the critical path

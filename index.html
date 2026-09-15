@@ -1,0 +1,1696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Pub</title>
+<style>
+  html, body { margin:0; height:100%; overflow:hidden; background:#03040a; }
+  canvas { display:block; }
+  #hud {
+    position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at center, rgba(22,14,8,.74), rgba(6,4,3,.94));
+    cursor:pointer; color:#bfeaf5; text-align:center;
+    font:400 15px/1.7 "Helvetica Neue", Arial, sans-serif;
+  }
+  #hud .panel { max-width:34ch; }
+  #hud h1 {
+    font-size:46px; letter-spacing:.14em; margin:0 0 .2em; font-weight:800;
+    font-family:"Arial Black", Impact, sans-serif; color:#f6faff;
+    text-shadow:0 0 16px #ff3b3b, 0 0 44px rgba(43,108,255,.6);
+  }
+  #hud p { margin:.2em 0; color:#c9a06a; letter-spacing:.16em; text-transform:uppercase; font-size:13px; }
+  #hud .keys { margin-top:1.5em; font-size:12px; color:#7d8796; letter-spacing:.08em; text-transform:none; }
+  #hint {
+    position:fixed; left:16px; bottom:14px; color:#6b5c45; pointer-events:none;
+    font:400 12px/1.4 ui-monospace, Menlo, Consolas, monospace; letter-spacing:.08em;
+  }
+  #cross {
+    position:fixed; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px;
+    border-radius:50%; background:rgba(255,255,255,.55); display:none; pointer-events:none;
+  }
+  #prompt {
+    position:fixed; left:50%; top:calc(50% + 26px); transform:translateX(-50%);
+    display:none; pointer-events:none; padding:6px 14px; border-radius:3px;
+    background:rgba(8,8,12,.8); border:1px solid #ff3b3b; color:#ffe6b0;
+    font:700 12px/1 Arial, Helvetica, sans-serif; letter-spacing:.14em;
+  }
+  #jb {
+    position:fixed; right:22px; top:50%; transform:translateY(-50%); width:310px;
+    display:none; z-index:20; background:rgba(10,8,6,.96); color:#e9e2d4;
+    border:1px solid #6b3a1c; border-radius:6px; overflow:hidden;
+    box-shadow:0 0 0 1px rgba(255,59,59,.35), 0 0 34px rgba(43,108,255,.25);
+    font:400 13px/1.5 Arial, Helvetica, sans-serif;
+  }
+  .jb-head {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 12px; background:linear-gradient(90deg, rgba(255,59,59,.35), rgba(43,108,255,.3));
+    font:800 15px/1 "Arial Black", Impact, sans-serif; letter-spacing:.14em; color:#fff;
+  }
+  .jb-head button { background:none; border:0; color:#ffd7d7; font-size:15px; cursor:pointer; }
+  .jb-note {
+    margin:10px 12px; font-size:11px; color:#8b7a63;
+    letter-spacing:.06em; text-transform:uppercase;
+  }
+  #jb-list { list-style:none; margin:0; padding:0 0 4px; max-height:212px; overflow:auto; }
+  #jb-list li {
+    padding:7px 14px; cursor:pointer; color:#c9bda8; border-left:3px solid transparent;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  #jb-list li:hover { background:rgba(255,255,255,.05); }
+  #jb-list li.on { color:#ffb347; border-left-color:#ff3b3b; background:rgba(255,59,59,.09); }
+  #jb-list li.jb-empty { color:#6b5c45; cursor:default; font-style:italic; }
+  #jb-list li.bad { color:#7a4a4a; text-decoration:line-through; }
+  .jb-ctrls { display:flex; align-items:center; gap:8px; padding:10px 12px; border-top:1px solid #3a2616; }
+  .jb-ctrls button {
+    flex:0 0 auto; min-width:42px; padding:7px 0; cursor:pointer; color:#e9e2d4;
+    background:#1d140b; border:1px solid #6b3a1c; border-radius:3px; font-size:12px;
+  }
+  .jb-ctrls button:hover { border-color:#ff3b3b; color:#fff; }
+  .jb-ctrls input { flex:1 1 auto; min-width:0; accent-color:#ff3b3b; }
+</style>
+</head>
+<body>
+<div id="hud"><div class="panel">
+  <h1>THE PUB</h1>
+  <p>every game &middot; every night</p>
+  <p class="keys">click to step inside<br>W A S D or scroll to walk &middot; drag to look<br>arrow keys look &middot; R runs the rain<br>click the jukebox (or press J) for the music</p>
+</div></div>
+<div id="hint">esc to release the mouse</div>
+<div id="cross"></div>
+<div id="prompt">JUKEBOX &mdash; click to open</div>
+
+<div id="jb">
+  <div class="jb-head"><span>JUKEBOX</span><button id="jb-close" title="close">&#10005;</button></div>
+  <p class="jb-note" id="jb-src">loading playlist&hellip;</p>
+  <ul id="jb-list"><li class="jb-empty">loading playlist&hellip;</li></ul>
+  <div class="jb-ctrls">
+    <button id="jb-prev" title="previous">&#9664;&#9664;</button>
+    <button id="jb-play" title="play / pause">&#9654;</button>
+    <button id="jb-next" title="next">&#9654;&#9654;</button>
+    <input id="jb-vol" type="range" min="0" max="1" step="0.01" value="0.45" title="volume">
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ---------------------------------------------------------------- room + look
+const W = 16, D = 12, H = 3.6;          // width (x), depth (z), height (y)
+const EYE = 1.65;
+const ROOM = { hw: W / 2, hd: D / 2, h: H };
+const FOG = 0.042;
+
+const GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789&#/:.-";
+const RAIN_COLORS = ["#ff3b3b", "#f4f6ff", "#2b6cff", "#ff4fa3", "#a855f7", "#2ee6ff"];
+const hexToRgbString = h => {
+  const c = new THREE.Color(h);
+  return [c.r, c.g, c.b].map(v => Math.round(v * 255)).join(",");
+};
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const touch   = matchMedia("(pointer: coarse)").matches;
+
+// ---------------------------------------------------------------- renderer
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06040a);
+scene.fog = new THREE.FogExp2(0x06040a, FOG);
+
+const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.1, 120);
+camera.position.set(0, EYE, 4.5);
+camera.rotation.order = 'YXZ';
+
+const listener = new THREE.AudioListener();
+camera.add(listener);
+
+/* =====================================================================
+   MATRIX RAIN (drawn to an offscreen canvas used on the walls)
+   ===================================================================== */
+const RAIN = (() => {
+  const W = 1024, H = 512;                 // texture size (power of two)
+  const rc = document.createElement("canvas");
+  rc.width = W; rc.height = H;
+  const rctx = rc.getContext("2d");
+  const fontSize = 18;
+  const chars = GLYPHS;
+  const COLORS = RAIN_COLORS.map(hexToRgbString);
+  const WHITE = "245,245,255";
+  const BG = "3,4,10";
+  const pick = () => COLORS[Math.floor(Math.random() * COLORS.length)];
+
+  const columns = Math.floor(W / fontSize);
+  const drops = [];
+  rctx.fillStyle = "rgb(" + BG + ")";
+  rctx.fillRect(0, 0, W, H);
+  for (let i = 0; i < columns; i++) {
+    drops.push({ y: Math.random() * H / fontSize, color: pick(), speed: 0.35 + Math.random() * 0.5 });
+  }
+
+  const tex = new THREE.CanvasTexture(rc);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+
+  function drawFrozen() {
+    rctx.font = fontSize + "px monospace";
+    for (let i = 0; i < columns; i++) {
+      const x = i * fontSize;
+      const start = Math.random() * H;
+      const len = 10 + Math.floor(Math.random() * 30);
+      rctx.shadowColor = "rgba(" + drops[i].color + ",0.5)";
+      rctx.shadowBlur = 6;
+      for (let j = 0; j < len; j++) {
+        const y = start + j * fontSize;
+        if (y < 0 || y > H) continue;
+        const ch = chars.charAt(Math.floor(Math.random() * chars.length));
+        const fade = 1 - (j / len);
+        const col = (ch >= "0" && ch <= "9") ? WHITE : drops[i].color;
+        rctx.fillStyle = "rgba(" + col + "," + (0.2 + fade * 0.55) + ")";
+        rctx.fillText(ch, x, y);
+      }
+    }
+    rctx.shadowBlur = 0;
+    tex.needsUpdate = true;
+  }
+
+  let last = 0;
+  function update(t) {
+    if (reduced || t - last < 66) return;
+    last = t;
+    rctx.fillStyle = "rgba(" + BG + ",0.05)";
+    rctx.fillRect(0, 0, W, H);
+    rctx.font = fontSize + "px monospace";
+    rctx.shadowBlur = 6;
+    for (let i = 0; i < columns; i++) {
+      const d = drops[i];
+      const ch = chars.charAt(Math.floor(Math.random() * chars.length));
+      const x = i * fontSize;
+      const y = d.y * fontSize;
+      rctx.shadowColor = "rgba(" + d.color + ",0.55)";
+      rctx.fillStyle = (ch >= "0" && ch <= "9") ? "rgba(" + WHITE + ",0.95)" : "rgba(" + d.color + ",0.92)";
+      rctx.fillText(ch, x, y);
+      d.y += d.speed;
+      if (y > H && Math.random() > 0.955) { d.y = 0; d.color = pick(); }
+    }
+    rctx.shadowBlur = 0;
+    tex.needsUpdate = true;
+  }
+
+  if (reduced) drawFrozen();
+  return { tex, update, freeze: drawFrozen };
+})();
+
+// Each wall needs its own texture object so the glyphs keep a square aspect on
+// walls of different lengths; the clones share the one canvas RAIN paints.
+const rainTextures = [];
+function rainTex(wallWidth) {
+  const t = RAIN.tex.clone();
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(wallWidth / 16, 0.45);
+  t.needsUpdate = true;
+  rainTextures.push(t);
+  return t;
+}
+
+// ---------------------------------------------------------------- materials
+const RED = 0xff3b3b, BLUE = 0x2b6cff, WHITE = 0xf4f6ff, AMBER = 0xffb347;
+
+function plankTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const x = c.getContext('2d');
+  x.fillStyle = '#432a19'; x.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 512; i += 32) {
+    for (let g = 0; g < 46; g++) {
+      const v = 0.12 + Math.random() * 0.18;
+      x.fillStyle = 'rgba(' + (118 + Math.random() * 40 | 0) + ',' +
+                              (76 + Math.random() * 28 | 0) + ',' +
+                              (44 + Math.random() * 20 | 0) + ',' + v.toFixed(2) + ')';
+      x.fillRect(Math.random() * 512, i + 3 + Math.random() * 26, 24 + Math.random() * 110, 1);
+    }
+    x.fillStyle = 'rgba(0,0,0,0.34)'; x.fillRect(0, i, 512, 2);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(4, 3);
+  return t;
+}
+
+const mat = {
+  floor:   new THREE.MeshStandardMaterial({ map: plankTexture(), color: 0xb08a63, roughness: .42, metalness: .12 }),
+  ceiling: new THREE.MeshStandardMaterial({ color: 0x140f0a, roughness: .95 }),
+  shell:   new THREE.MeshStandardMaterial({ color: 0x33200f, roughness: .62, metalness: .15 }),
+  deck:    new THREE.MeshStandardMaterial({ color: 0x5a3418, roughness: .3,  metalness: .12 }),
+  chrome:  new THREE.MeshStandardMaterial({ color: 0xc9973f, roughness: .26, metalness: .95 }),
+  seat:    new THREE.MeshStandardMaterial({ color: 0x6e2024, roughness: .52, metalness: .1 }),
+  dark:    new THREE.MeshStandardMaterial({ color: 0x1b1209, roughness: .66, metalness: .35 }),
+};
+const glow  = new THREE.MeshBasicMaterial({ color: RED });
+const glowV = new THREE.MeshBasicMaterial({ color: BLUE });
+const glowM = new THREE.MeshBasicMaterial({ color: WHITE });
+const glowA = new THREE.MeshBasicMaterial({ color: AMBER });
+
+const BOTTLE_COLORS = ['#e8a14a', '#7fbf6a', '#d4483f', '#5f9fe0', '#e6d8a8', '#b06cff'];
+
+function box(w, h, d, m, x, y, z, parent) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+  mesh.position.set(x, y, z);
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  (parent || scene).add(mesh);
+  return mesh;
+}
+function cyl(rt, rb, h, m, x, y, z, seg, parent) {
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg || 16), m);
+  mesh.position.set(x, y, z);
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  (parent || scene).add(mesh);
+  return mesh;
+}
+// unlit accent strip — no shadow work, reads as an emitter
+function strip(w, h, d, m, x, y, z, parent) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+  mesh.position.set(x, y, z);
+  (parent || scene).add(mesh);
+  return mesh;
+}
+
+// ---------------------------------------------------------------- shell
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, D), mat.floor);
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+const ceil = new THREE.Mesh(new THREE.PlaneGeometry(W, D), mat.ceiling);
+ceil.rotation.x = Math.PI / 2;
+ceil.position.y = H;
+scene.add(ceil);
+
+function wall(w, x, z, ry) {
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(w, H),
+    new THREE.MeshBasicMaterial({ map: rainTex(w) })
+  );
+  m.position.set(x, H / 2, z);
+  m.rotation.y = ry;
+  scene.add(m);
+
+  // old-school wainscot: wood panelling, a brass cap rail, and a low LED line
+  const panel = box(w, 1.05, 0.09, mat.shell, 0, 0.525, 0);
+  panel.position.set(x, 0.525, z); panel.rotation.y = ry; panel.translateZ(0.045);
+  const cap = box(w, 0.07, 0.16, mat.chrome, 0, 1.09, 0);
+  cap.position.set(x, 1.09, z); cap.rotation.y = ry; cap.translateZ(0.06);
+  const s = strip(w, 0.04, 0.03, glow, 0, 0.1, 0);
+  s.position.set(x, 0.1, z); s.rotation.y = ry; s.translateZ(0.1);
+}
+wall(W, 0, -D / 2, 0);              // back (behind the bar)
+wall(W, 0,  D / 2, Math.PI);        // front (entrance)
+wall(D, -W / 2, 0,  Math.PI / 2);   // left
+wall(D,  W / 2, 0, -Math.PI / 2);   // right
+
+// walls hold a still frame of the rain; press R to let it run
+RAIN.freeze();
+rainTextures.forEach(t => { t.needsUpdate = true; });
+
+// ceiling ribs with a light channel down the middle of each
+for (let i = -2; i <= 2; i++) {
+  box(W, 0.22, 0.3, mat.shell, 0, H - 0.12, i * 2.4);
+  strip(W, 0.02, 0.06, i % 2 ? glowV : glow, 0, H - 0.235, i * 2.4);
+}
+
+// ---------------------------------------------------------------- the bar
+const BAR_Z = -3.4, BAR_LEN = 10, BAR_W = 0.9, BAR_H = 1.12;
+const barX = -1.5;
+box(BAR_LEN, BAR_H, BAR_W, mat.shell, barX, BAR_H / 2, BAR_Z);
+box(BAR_LEN + 0.4, 0.1, BAR_W + 0.35, mat.deck, barX, BAR_H + 0.05, BAR_Z);
+const BAR_FRONT = BAR_Z + BAR_W / 2;
+strip(BAR_LEN + 0.4, 0.025, 0.02, glow, barX, BAR_H - 0.03, BAR_FRONT + 0.18);  // counter edge
+strip(BAR_LEN, 0.03, 0.02, glowV, barX, 0.16, BAR_FRONT + 0.01);                // kick underglow
+cyl(0.04, 0.04, BAR_LEN, mat.chrome, barX, 0.34, BAR_FRONT + 0.3, 12).rotation.z = Math.PI / 2;
+
+// back bar: lit shelves, bottles that glow from inside
+const BACK_Z = -D / 2 + 0.35;
+box(BAR_LEN, 2.4, 0.5, mat.shell, barX, 1.2, BACK_Z);
+for (let s = 0; s < 3; s++) {
+  const y = 0.9 + s * 0.55;
+  box(BAR_LEN - 0.4, 0.06, 0.42, mat.deck, barX, y, BACK_Z + 0.06);
+  strip(BAR_LEN - 0.4, 0.015, 0.015, glow, barX, y - 0.04, BACK_Z + 0.27);
+  for (let b = 0; b < 22; b++) {
+    const x = barX - BAR_LEN / 2 + 0.5 + Math.random() * (BAR_LEN - 1);
+    const c = new THREE.Color(BOTTLE_COLORS[Math.floor(Math.random() * BOTTLE_COLORS.length)]);
+    const bm = new THREE.MeshStandardMaterial({
+      color: c.clone().multiplyScalar(0.45), emissive: c, emissiveIntensity: 0.55,
+      roughness: .25, metalness: .1
+    });
+    cyl(0.035, 0.05, 0.26, bm, x, y + 0.16, BACK_Z + 0.06, 8);
+  }
+}
+
+// stools
+for (let i = 0; i < 6; i++) {
+  const x = barX - 4 + i * 1.6;
+  const z = BAR_Z + 1.3;
+  cyl(0.05, 0.06, 0.72, mat.dark, x, 0.36, z, 10);
+  cyl(0.24, 0.24, 0.09, mat.seat, x, 0.76, z, 16);
+  cyl(0.245, 0.245, 0.012, i % 2 ? glowM : glow, x, 0.705, z, 16);
+  cyl(0.22, 0.22, 0.03, mat.chrome, x, 0.25, z, 12);
+}
+
+// ---------------------------------------------------------------- beer taps
+const BEERS = [
+  ['STADIUM LAGER', '#c9932c'], ['NORTHGATE RED', '#b5372c'], ['HARBOR PALE', '#d6b45c'],
+  ['MIDNIGHT STOUT', '#2a1a12'], ['RAIL KING IPA', '#4f8f3a'], ['BLUE LINE PILS', '#2b6cff'],
+  ['OAKMONT AMBER', '#9a5324'], ['CIDER HOUSE', '#c96a24'], ['GRAND FORKS WHEAT', '#c8a86a'],
+  ['STEEL VALLEY DARK', '#3b2a44']
+];
+const tapDark = new THREE.MeshStandardMaterial({ color: 0x14100c, roughness: .6, metalness: .3 });
+
+const BADGES = BEERS.map(([name, color]) => {
+  const c = document.createElement('canvas');
+  c.width = 160; c.height = 224;
+  const x = c.getContext('2d');
+  x.fillStyle = color; x.fillRect(0, 0, 160, 224);
+  const sh = x.createLinearGradient(0, 0, 160, 0);
+  sh.addColorStop(0, 'rgba(255,255,255,0.22)');
+  sh.addColorStop(0.45, 'rgba(255,255,255,0)');
+  sh.addColorStop(1, 'rgba(0,0,0,0.3)');
+  x.fillStyle = sh; x.fillRect(0, 0, 160, 224);
+  x.strokeStyle = 'rgba(255,255,255,0.8)'; x.lineWidth = 5;
+  x.strokeRect(11, 11, 138, 202);
+  x.fillStyle = '#fff'; x.textAlign = 'center';
+  const words = name.split(' ');
+  const size = words.length > 2 ? 24 : 27;
+  x.font = '800 ' + size + 'px Arial, Helvetica, sans-serif';
+  const top = 112 - (words.length - 1) * 17;
+  words.forEach((w, i) => x.fillText(w, 80, top + i * 34));
+  const tex = new THREE.CanvasTexture(c);
+  return new THREE.MeshStandardMaterial({ map: tex, roughness: .45, metalness: .1 });
+});
+
+// one tap: tower, spout, handle rod and a branded badge
+function beerTap(x, y, z, ry, badge, parent) {
+  const g = new THREE.Group();
+  cyl(0.055, 0.058, 0.03, mat.chrome, 0, 0.015, 0, 14, g);   // flange
+  cyl(0.040, 0.046, 0.40, mat.chrome, 0, 0.20,  0, 14, g);   // tower
+  const arm = cyl(0.021, 0.021, 0.12, mat.chrome, 0, 0.375, 0.06, 10, g);
+  arm.rotation.x = Math.PI / 2;                              // elbow reaching forward
+  cyl(0.019, 0.019, 0.085, mat.chrome, 0, 0.325, 0.115, 10, g);
+  cyl(0.011, 0.011, 0.14, mat.chrome, 0, 0.47, -0.025, 8, g);  // handle rod
+  const b = new THREE.Mesh(
+    new THREE.BoxGeometry(0.10, 0.165, 0.024),
+    [tapDark, tapDark, tapDark, tapDark, badge, badge]
+  );
+  b.position.set(0, 0.615, -0.035);
+  b.rotation.x = -0.16;
+  b.castShadow = true;
+  g.add(b);
+  g.position.set(x, y, z);
+  g.rotation.y = ry;
+  (parent || scene).add(g);
+  return g;
+}
+
+// back counter behind the bartender, carrying the long tap wall
+const TAPWALL_Z = -5.15, TAPWALL_X = barX - 0.1, TAPWALL_W = 9.8;
+box(TAPWALL_W, 1.12, 0.32, mat.shell,  TAPWALL_X, 0.56, TAPWALL_Z);
+box(TAPWALL_W + 0.1, 0.06, 0.38, mat.chrome, TAPWALL_X, 1.15, TAPWALL_Z);
+strip(TAPWALL_W, 0.025, 0.02, glowV, TAPWALL_X, 0.18, TAPWALL_Z + 0.17);
+box(TAPWALL_W - 0.4, 0.02, 0.2, mat.chrome, TAPWALL_X, 1.185, TAPWALL_Z + 0.24);  // drip tray
+
+const TAP_N = 21, TAP_GAP = (TAPWALL_W - 0.8) / (TAP_N - 1);
+for (let i = 0; i < TAP_N; i++) {
+  beerTap(TAPWALL_X - (TAPWALL_W - 0.8) / 2 + i * TAP_GAP, 1.18, TAPWALL_Z,
+          0, BADGES[i % BADGES.length]);
+}
+
+// three on the counter itself, right in front of the bartender
+const ISLAND_X = -0.4;
+box(1.15, 0.02, 0.26, mat.chrome, ISLAND_X, 1.232, BAR_Z - 0.06);
+[-0.34, 0, 0.34].forEach((dx, i) => {
+  beerTap(ISLAND_X + dx, 1.222, BAR_Z - 0.3, 0, BADGES[(i * 3 + 1) % BADGES.length]);
+});
+
+// ---------------------------------------------------------------- tables
+function table(x, z) {
+  const g = new THREE.Group();
+  cyl(0.6, 0.6, 0.07, mat.deck, 0, 0.74, 0, 24, g);
+  cyl(0.62, 0.62, 0.014, glow, 0, 0.698, 0, 24, g);
+  cyl(0.07, 0.07, 0.74, mat.dark, 0, 0.37, 0, 12, g);
+  cyl(0.35, 0.35, 0.04, mat.dark, 0, 0.03, 0, 16, g);
+  cyl(0.36, 0.36, 0.012, glowV, 0, 0.056, 0, 16, g);
+  for (let a = 0; a < 2; a++) {
+    const ang = a * Math.PI + Math.PI / 5;
+    const c = new THREE.Group();
+    cyl(0.03, 0.03, 0.45, mat.dark, -0.18, 0.22, -0.18, 8, c);
+    cyl(0.03, 0.03, 0.45, mat.dark,  0.18, 0.22, -0.18, 8, c);
+    cyl(0.03, 0.03, 0.45, mat.dark, -0.18, 0.22,  0.18, 8, c);
+    cyl(0.03, 0.03, 0.45, mat.dark,  0.18, 0.22,  0.18, 8, c);
+    box(0.46, 0.06, 0.46, mat.seat, 0, 0.47, 0, c);
+    box(0.46, 0.55, 0.06, mat.shell, 0, 0.75, -0.2, c);
+    strip(0.42, 0.02, 0.02, glowM, 0, 1.01, -0.2, c);
+    c.position.set(Math.cos(ang), 0, Math.sin(ang));
+    c.rotation.y = -ang - Math.PI / 2;   // seat back outward, facing the table
+    g.add(c);
+  }
+  g.position.set(x, 0, z);
+  scene.add(g);
+}
+const TABLES = [[-3.6, 1.8], [3.6, 1.8]];
+TABLES.forEach(([x, z]) => table(x, z));
+
+// ---------------------------------------------------------------- booths
+const BOOTH_W = 1.9, BOOTH_D = 1.7;   // width along the wall, depth out from it
+
+function booth(x, z, ry, i, sides) {
+  const g = new THREE.Group();
+  const accent = i % 2 ? glowV : glow;
+  for (const side of (sides || [-1, 1])) {
+    box(0.55, 0.42, 1.45, mat.shell, side * 0.66, 0.21, -0.05, g);  // bench base
+    box(0.58, 0.10, 1.45, mat.seat,  side * 0.66, 0.47, -0.05, g);  // cushion
+    box(0.12, 1.35, 1.60, mat.shell, side * 0.94, 0.68,  0.00, g);  // high back / divider
+    box(0.06, 0.85, 1.50, mat.seat,  side * 0.85, 0.82,  0.00, g);  // padded facing
+    strip(0.14, 0.02, 1.6, accent, side * 0.94, 1.365, 0, g);       // lit cap rail
+    strip(0.02, 0.02, 1.45, accent, side * 0.4, 0.53, -0.05, g);    // seat edge line
+  }
+  box(1.05, 0.06, 0.80, mat.deck, 0, 0.74, -0.1, g);
+  strip(1.09, 0.014, 0.84, accent, 0, 0.702, -0.1, g);
+  cyl(0.06, 0.06, 0.74, mat.dark, 0, 0.37, -0.1, 10, g);
+  cyl(0.30, 0.30, 0.04, mat.dark, 0, 0.03, -0.1, 14, g);
+  // table puck instead of a candle
+  cyl(0.07, 0.07, 0.03, mat.chrome, 0, 0.79, -0.1, 12, g);
+  const puck = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 10), glowA);
+  puck.position.set(0, 0.85, -0.1);
+  g.add(puck);
+  // small lamp so the table surface actually reads in the dark room
+  const lamp = new THREE.PointLight(0xffc48a, 0.85, 3.0, 2);
+  lamp.position.set(0, 1.55, -0.1);
+  g.add(lamp);
+  g.position.set(x, 0, z);
+  g.rotation.y = ry;   // local +z is the open side, so the booth always faces the room
+  scene.add(g);
+}
+
+const BOOTHS = [];
+// left wall: the bay nearest the bar is left open for the jukebox
+[1.1, 3.3].forEach(z => BOOTHS.push([-W / 2 + BOOTH_D / 2, z,  Math.PI / 2]));
+[-0.4, 1.8, 4.0].forEach(z => BOOTHS.push([W / 2 - BOOTH_D / 2, z, -Math.PI / 2]));
+// back-right corner: pushed into the corner, one bench only, against the wall
+const CORNER = [W / 2 - BOOTH_D / 2, -D / 2 + BOOTH_W / 2 + 0.09, -Math.PI / 2, [-1]];
+BOOTHS.push(CORNER);
+// entry wall: only the far corners, so the doorway stays clear
+[-4.6, 4.6].forEach(x => BOOTHS.push([x, D / 2 - BOOTH_D / 2, Math.PI]));
+BOOTHS.forEach(([x, z, ry, sides], i) => booth(x, z, ry, i, sides));
+
+/* ----------------------------------------------------------------------
+   PLAYLIST
+   Tracks come from files the person picks or drops; they are read straight
+   off disk as object URLs and never uploaded anywhere.
+   ---------------------------------------------------------------------- */
+const PLAYER = (() => {
+  const el = new Audio();
+  el.crossOrigin = 'anonymous';   // required, or remote audio taints the audio graph
+  el.preload = 'auto';
+  const sound = new THREE.PositionalAudio(listener);
+  const tracks = [];
+  let idx = -1, wired = false, vol = 0.45;
+
+  function wire() {
+    if (wired) return;
+    sound.setMediaElementSource(el);       // streams the file through the panner
+    sound.setDistanceModel('inverse');
+    sound.setRefDistance(2.4);             // full volume within ~2.4m of the cabinet
+    sound.setRolloffFactor(0.8);           // still audible across the room
+    sound.setMaxDistance(30);
+    sound.setVolume(vol);
+    wired = true;
+  }
+  function resume() {
+    if (listener.context.state === 'suspended') listener.context.resume();
+  }
+  function play(i) {
+    if (!tracks.length) return;
+    idx = (i % tracks.length + tracks.length) % tracks.length;
+    wire(); resume();
+    el.src = tracks[idx].url;
+    el.play().catch(() => {});
+    renderList();
+  }
+  function toggle() {
+    if (!tracks.length) return;
+    if (idx < 0) return play(0);
+    wire(); resume();
+    el.paused ? el.play().catch(() => {}) : el.pause();
+    renderList();
+  }
+  el.addEventListener('ended', () => play(idx + 1));
+  el.addEventListener('play',  renderList);
+  el.addEventListener('pause', renderList);
+
+  let emptyMsg = 'loading playlist\u2026';
+  const listEl = () => document.getElementById('jb-list');
+  function renderList() {
+    const ul = listEl(); if (!ul) return;
+    document.getElementById('jb-play').innerHTML = el.paused ? '&#9654;' : '&#10074;&#10074;';
+    if (!tracks.length) { ul.innerHTML = '<li class="jb-empty">' + emptyMsg + '</li>'; return; }
+    ul.innerHTML = '';
+    tracks.forEach((tr, i) => {
+      const li = document.createElement('li');
+      li.textContent = (i + 1) + '. ' + tr.name;
+      if (i === idx) li.className = 'on';
+      li.addEventListener('click', () => play(i));
+      ul.appendChild(li);
+    });
+  }
+  let fails = 0;
+  el.addEventListener('playing', () => { fails = 0; });
+  el.addEventListener('error', () => {
+    if (idx < 0) return;
+    const li = document.querySelectorAll('#jb-list li')[idx];
+    if (li) li.classList.add('bad');
+    if (++fails < tracks.length) play(idx + 1);
+  });
+
+  function addRemote(list, autoplay) {
+    const first = tracks.length;
+    list.forEach(t => tracks.push(t));
+    renderList();
+    if (autoplay && idx < 0 && tracks.length > first) {
+      idx = first;                       // queued; starts on the first click
+      renderList();
+    }
+  }
+
+  return {
+    sound, addRemote, play, toggle,
+    setStatus(m) { emptyMsg = m; renderList(); },
+    isIdle: () => idx < 0 || el.paused,
+    count: () => tracks.length,
+    prev: () => play(idx - 1),
+    next: () => play(idx + 1),
+    setVolume(v) { vol = v; if (wired) sound.setVolume(v); },
+    names: () => tracks.map(t => t.name),
+    index: () => idx,
+    playing: () => !el.paused && idx >= 0,
+    render: renderList
+  };
+})();
+
+/* ----------------------------------------------------------------------
+   HOLOGRAPHIC JUKEBOX
+   Classic arched cabinet, with the selection display projected above it.
+   ---------------------------------------------------------------------- */
+const JUKE_X = -W / 2 + 0.42, JUKE_Z = -1.1;
+const JUKEBOX = (() => {
+  const g = new THREE.Group();
+
+  // cabinet
+  box(1.30, 1.15, 0.62, mat.shell,  0, 0.575, 0, g);
+  box(1.36, 0.07, 0.68, mat.chrome, 0, 1.185, 0, g);
+  box(1.10, 0.10, 0.04, mat.chrome, 0, 0.16,  0.31, g);
+
+  // arched crown: a half cylinder laid on its side
+  const crown = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.65, 0.65, 0.62, 26, 1, false, -Math.PI / 2, Math.PI),
+    mat.shell
+  );
+  crown.rotation.x = -Math.PI / 2;
+  crown.position.y = 1.22;
+  crown.castShadow = crown.receiveShadow = true;
+  g.add(crown);
+
+  // neon tubes tracing both edges of the arch
+  const tube = new THREE.TorusGeometry(0.65, 0.022, 8, 30, Math.PI);
+  [[-0.31, glowV], [0.31, glow]].forEach(([z, m]) => {
+    const t = new THREE.Mesh(tube, m);
+    t.position.set(0, 1.22, z);
+    g.add(t);
+  });
+
+  // front selection display
+  const face = document.createElement('canvas');
+  face.width = 512; face.height = 384;
+  const fctx = face.getContext('2d');
+  const faceTex = new THREE.CanvasTexture(face);
+  const panel = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.06, 0.8),
+    new THREE.MeshBasicMaterial({ map: faceTex })
+  );
+  panel.position.set(0, 0.74, 0.315);
+  g.add(panel);
+
+  // projector beam rising off the crown
+  const beam = new THREE.Mesh(
+    new THREE.ConeGeometry(0.5, 0.85, 22, 1, true),
+    new THREE.MeshBasicMaterial({
+      color: 0x7fd4ff, transparent: true, opacity: 0.07,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+    })
+  );
+  beam.rotation.x = Math.PI;          // apex down, spreading upward
+  beam.position.set(0, 1.72, 0.05);
+  g.add(beam);
+
+  // the hologram itself
+  const holo = document.createElement('canvas');
+  holo.width = 512; holo.height = 256;
+  const hctx = holo.getContext('2d');
+  const holoTex = new THREE.CanvasTexture(holo);
+  const plate = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.96, 0.48),
+    new THREE.MeshBasicMaterial({
+      map: holoTex, transparent: true, opacity: 0.92,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+    })
+  );
+  plate.position.set(0, 1.86, 0.18);
+  g.add(plate);
+
+  // spinning record ring under the plate
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(0.26, 0.008, 6, 44),
+    new THREE.MeshBasicMaterial({
+      color: 0x9fe0ff, transparent: true, opacity: 0.75,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    })
+  );
+  ring.position.set(0, 1.86, 0.17);
+  g.add(ring);
+  const ring2 = ring.clone();
+  ring2.scale.setScalar(0.62);
+  g.add(ring2);
+
+  const lamp = new THREE.PointLight(0x8fc8ff, 1.1, 4.2, 2);
+  lamp.position.set(0, 1.5, 0.35);
+  g.add(lamp);
+
+  PLAYER.sound.position.set(0, 1.0, 0.3);   // the music comes out of the cabinet
+  g.add(PLAYER.sound);
+
+  g.position.set(JUKE_X, 0, JUKE_Z);
+  g.rotation.y = Math.PI / 2;         // front faces into the room
+  scene.add(g);
+
+  const TRACKS = [
+    'A1  BLUE RIDGE LINE', 'A2  SATURDAY STATIC', 'A3  EIGHT BALL BLUES',
+    'B1  MARQUEE LIGHTS', 'B2  LONG WAY HOME', 'B3  THIRD AND LONG'
+  ];
+
+  function drawFace(t) {
+    const c = fctx, w = face.width, h = face.height;
+    c.fillStyle = '#0d0a06'; c.fillRect(0, 0, w, h);
+    const grd = c.createLinearGradient(0, 0, 0, h);
+    grd.addColorStop(0, 'rgba(255,59,59,0.35)');
+    grd.addColorStop(0.5, 'rgba(43,108,255,0.22)');
+    grd.addColorStop(1, 'rgba(168,85,247,0.3)');
+    c.fillStyle = grd; c.fillRect(0, 0, w, 58);
+    c.fillStyle = '#ffe6b0'; c.font = '800 30px "Arial Black", Impact, sans-serif';
+    c.textAlign = 'center'; c.fillText('SELECT-O-MATIC', w / 2, 40);
+    c.textAlign = 'left';
+    const real = PLAYER.names();
+    const list = real.length ? real : TRACKS;
+    const sel = real.length
+      ? Math.max(0, PLAYER.index())
+      : Math.floor(t * 0.5) % TRACKS.length;
+    const top = Math.max(0, Math.min(sel - 2, list.length - 6));
+    list.slice(top, top + 6).forEach((name, k) => {
+      const i = top + k, y = 92 + k * 44;
+      if (i === sel) {
+        c.fillStyle = 'rgba(255,180,71,0.22)'; c.fillRect(22, y - 26, w - 44, 36);
+        c.fillStyle = '#ffb347';
+      } else c.fillStyle = '#9d8a6d';
+      c.font = '700 23px Arial, Helvetica, sans-serif';
+      const label = real.length ? String(i + 1).padStart(2, '0') + '  ' + name : name;
+      c.fillText(label.length > 26 ? label.slice(0, 25) + '\u2026' : label, 34, y);
+    });
+    if (!real.length) {
+      c.fillStyle = '#ff6b6b'; c.textAlign = 'center';
+      c.font = '700 19px Arial, Helvetica, sans-serif';
+      c.fillText('OUT OF ORDER', w / 2, h - 18);
+      c.textAlign = 'left';
+    }
+    faceTex.needsUpdate = true;
+  }
+
+  function drawHolo(t) {
+    const c = hctx, w = holo.width, h = holo.height;
+    c.fillStyle = '#000208'; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#7fe4ff'; c.font = '700 20px Arial, Helvetica, sans-serif';
+    c.fillText('NOW PLAYING', 22, 36);
+    const real = PLAYER.names();
+    const title = real.length
+      ? (real[Math.max(0, PLAYER.index())] || real[0])
+      : TRACKS[Math.floor(t * 0.5) % TRACKS.length].slice(4);
+    c.fillStyle = '#eaf8ff'; c.font = '800 30px "Arial Black", Impact, sans-serif';
+    c.fillText(title.length > 20 ? title.slice(0, 19) + '\u2026' : title, 22, 78);
+    const live = PLAYER.playing() || !real.length;
+    for (let i = 0; i < 30; i++) {
+      const v = live
+        ? (Math.sin(t * 6 + i * 0.55) * 0.5 + Math.sin(t * 2.7 + i * 0.2) * 0.5 + 1) * 0.5
+        : 0.04;
+      const bh = 10 + v * 110;
+      c.fillStyle = i % 5 === 0 ? 'rgba(255,79,163,0.9)' : 'rgba(110,200,255,0.85)';
+      c.fillRect(22 + i * 16, h - 26 - bh, 10, bh);
+    }
+    c.fillStyle = 'rgba(0,0,0,0.35)';
+    for (let y = 0; y < h; y += 5) c.fillRect(0, y, w, 2);   // scanlines
+    holoTex.needsUpdate = true;
+  }
+
+  let acc = 0;
+  return {
+    group: g,
+    update(elapsed, dt) {
+      ring.rotation.z -= dt * 1.6;
+      ring2.rotation.z += dt * 2.4;
+      plate.position.y = 1.86 + Math.sin(elapsed * 1.3) * 0.014;
+      plate.material.opacity = 0.86 + Math.sin(elapsed * 9) * 0.06;   // faint flicker
+      acc += dt;
+      if (acc > 1 / 12) { drawFace(elapsed); drawHolo(elapsed); acc = 0; }
+    }
+  };
+})();
+
+// ---------------------------------------------------------------- sign
+function signTexture(text) {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 256;
+  const x = c.getContext('2d');
+  x.fillStyle = '#0b0704'; x.fillRect(0, 0, c.width, c.height);
+  x.shadowColor = '#ff3b3b'; x.shadowBlur = 30;
+  x.strokeStyle = '#ff3b3b'; x.lineWidth = 6;
+  x.strokeRect(18, 18, c.width - 36, c.height - 36);
+  x.shadowColor = '#2b6cff'; x.shadowBlur = 34;
+  x.fillStyle = '#f6faff';
+  x.font = '800 116px "Arial Black", Impact, Haettenschweiler, sans-serif';
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText(text, c.width / 2, c.height / 2 - 10);
+  x.shadowBlur = 12; x.shadowColor = '#ff3b3b';
+  x.fillStyle = '#ffb347';
+  x.font = '700 30px Arial, Helvetica, sans-serif';
+  x.fillText('S P O R T S   B A R', c.width / 2, c.height / 2 + 68);
+  x.shadowBlur = 0;
+  return new THREE.CanvasTexture(c);
+}
+const sign = new THREE.Mesh(
+  new THREE.PlaneGeometry(3.0, 0.66),
+  new THREE.MeshBasicMaterial({ map: signTexture('THE PUB') })
+);
+sign.position.set(barX, 0.68, BAR_FRONT + 0.01);
+scene.add(sign);
+
+// door on the entrance wall
+box(1.2, 2.2, 0.12, mat.shell, 0, 1.1, D / 2 - 0.07);
+strip(1.28, 2.28, 0.02, glowV, 0, 1.1, D / 2 - 0.14);
+box(1.1, 2.1, 0.06, mat.dark, 0, 1.1, D / 2 - 0.11);
+cyl(0.05, 0.05, 0.12, mat.chrome, 0.45, 1.05, D / 2 - 0.2, 10).rotation.x = Math.PI / 2;
+
+// ---------------------------------------------------------------- screens
+const tvMat   = new THREE.MeshStandardMaterial({ color: 0x0b0b0f, roughness: .3, metalness: .65 });
+const glowMat = new THREE.MeshBasicMaterial({ color: 0x3f9dd8 });
+
+function makeFeed(kind) {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 288;
+  return { kind, c, ctx: c.getContext('2d'), tex: new THREE.CanvasTexture(c) };
+}
+const feeds = [makeFeed('football'), makeFeed('basketball'), makeFeed('baseball'),
+               makeFeed('ticker'), makeFeed('drafts')];
+
+const TICKER = [
+  ['RIVERTON', 21, 'MARSHALL', 17, 'Q3'],
+  ['HARBOR CITY', 88, 'CENTRAL', 84, 'Q4'],
+  ['PIONEERS', 3, 'RAIL KINGS', 2, 'T7'],
+  ['GRAND FORKS', 14, 'BAY UNION', 31, 'FINAL'],
+  ['LAKESIDE', 45, 'OAKMONT', 45, 'OT'],
+  ['STEEL VALLEY', 2, 'NORTHPORT', 1, 'P3']
+];
+const TAP_LIST = [
+  ['DOMESTIC DRAFT', '4.00'], ['STADIUM LAGER', '5.00'], ['AMBER ALE', '5.50'],
+  ['PITCHER / 60 OZ', '18.00'], ['WINGS, 10 PC', '13.00'], ['LOADED NACHOS', '11.00'],
+  ['BASKET OF FRIES', '6.50']
+];
+
+// shared broadcast score bug
+function bug(x, cw, top, away, home, status) {
+  x.fillStyle = 'rgba(8,8,12,0.94)'; x.fillRect(0, top, cw, 58);
+  x.fillStyle = '#ff3b3b'; x.fillRect(0, top, 8, 29);
+  x.fillStyle = '#2b6cff'; x.fillRect(0, top + 29, 8, 29);
+  x.font = '700 20px Arial, Helvetica, sans-serif';
+  x.fillStyle = '#e9edf5';
+  x.fillText(away[0], 22, top + 22);
+  x.fillText(home[0], 22, top + 51);
+  x.textAlign = 'right';
+  x.fillStyle = away[1] >= home[1] ? '#ffd166' : '#8f98a8';
+  x.fillText(String(away[1]), cw - 96, top + 22);
+  x.fillStyle = home[1] >= away[1] ? '#ffd166' : '#8f98a8';
+  x.fillText(String(home[1]), cw - 96, top + 51);
+  x.textAlign = 'left';
+  x.fillStyle = 'rgba(255,255,255,0.10)'; x.fillRect(cw - 86, top + 8, 78, 42);
+  x.fillStyle = '#e9edf5'; x.font = '700 17px Arial, Helvetica, sans-serif';
+  x.textAlign = 'center';
+  x.fillText(status[0], cw - 47, top + 26);
+  x.fillStyle = '#9fb2c8'; x.font = '600 15px Arial, Helvetica, sans-serif';
+  x.fillText(status[1], cw - 47, top + 46);
+  x.textAlign = 'left';
+}
+function liveDot(x, cw, t) {
+  if (Math.sin(t * 3) <= 0) return;
+  x.fillStyle = '#ff3b3b'; x.beginPath(); x.arc(26, 24, 7, 0, 7); x.fill();
+  x.fillStyle = '#ffdcdc'; x.font = '700 15px Arial, Helvetica, sans-serif';
+  x.fillText('LIVE', 40, 29);
+}
+const gameClock = (t, len) => {
+  const left = len - Math.floor(t * 3) % len;
+  return Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
+};
+
+function paint(f, t) {
+  const x = f.ctx, cw = f.c.width, ch = f.c.height;
+  x.setTransform(1, 0, 0, 1, 0, 0);
+  x.textAlign = 'left';
+
+  if (f.kind === 'football') {
+    x.fillStyle = '#17441f'; x.fillRect(0, 0, cw, ch);
+    x.fillStyle = 'rgba(0,0,0,0.16)';
+    for (let i = 0; i < cw; i += 64) x.fillRect(i, 0, 32, ch);
+    x.strokeStyle = 'rgba(255,255,255,0.35)'; x.lineWidth = 2;
+    for (let i = 1; i < 10; i++) { x.beginPath(); x.moveTo(i * cw / 10, 0); x.lineTo(i * cw / 10, ch); x.stroke(); }
+    x.fillStyle = 'rgba(255,59,59,0.5)'; x.fillRect(0, 0, 42, ch);
+    x.fillStyle = 'rgba(43,108,255,0.5)'; x.fillRect(cw - 42, 0, 42, ch);
+    // line of scrimmage and first-down marker
+    const los = 120 + (Math.floor(t * 0.6) % 8) * 26;
+    x.strokeStyle = '#3b6fff'; x.lineWidth = 4;
+    x.beginPath(); x.moveTo(los, 0); x.lineTo(los, ch); x.stroke();
+    x.strokeStyle = '#ffd166';
+    x.beginPath(); x.moveTo(los + 58, 0); x.lineTo(los + 58, ch); x.stroke();
+    bug(x, cw, 0, ['RIVERTON', 21], ['MARSHALL', 17], ['3RD', gameClock(t, 900)]);
+    x.fillStyle = 'rgba(8,8,12,0.9)'; x.fillRect(0, ch - 40, cw, 40);
+    x.fillStyle = '#ffd166'; x.font = '700 19px Arial, Helvetica, sans-serif';
+    x.fillText('2ND & 6', 20, ch - 14);
+    x.fillStyle = '#cfd8e6'; x.font = '600 17px Arial, Helvetica, sans-serif';
+    x.fillText('BALL ON RIV 34', 124, ch - 14);
+    x.textAlign = 'right';
+    x.fillStyle = '#8f98a8'; x.fillText('TO: 2 / 3', cw - 20, ch - 14);
+    x.textAlign = 'left';
+    liveDot(x, cw, t);
+
+  } else if (f.kind === 'basketball') {
+    x.fillStyle = '#8a5a2b'; x.fillRect(0, 0, cw, ch);
+    x.fillStyle = 'rgba(0,0,0,0.22)'; x.fillRect(0, 0, cw, ch);
+    x.strokeStyle = 'rgba(255,255,255,0.45)'; x.lineWidth = 3;
+    x.strokeRect(30, 70, cw - 60, ch - 100);
+    x.beginPath(); x.arc(cw / 2, ch / 2 + 10, 46, 0, 7); x.stroke();
+    x.beginPath(); x.moveTo(cw / 2, 70); x.lineTo(cw / 2, ch - 30); x.stroke();
+    x.beginPath(); x.arc(30, ch / 2 + 10, 84, -1.2, 1.2); x.stroke();
+    x.beginPath(); x.arc(cw - 30, ch / 2 + 10, 84, Math.PI - 1.2, Math.PI + 1.2); x.stroke();
+    bug(x, cw, 0, ['HARBOR CITY', 88], ['CENTRAL', 84], ['4TH', gameClock(t, 720)]);
+    // shot clock
+    x.fillStyle = 'rgba(8,8,12,0.92)'; x.fillRect(cw - 104, ch - 66, 84, 52);
+    x.fillStyle = '#ff3b3b'; x.font = '700 38px ui-monospace, Menlo, monospace';
+    x.textAlign = 'center';
+    x.fillText(String(24 - Math.floor(t * 2) % 24).padStart(2, '0'), cw - 62, ch - 26);
+    x.textAlign = 'left';
+    x.fillStyle = '#e9edf5'; x.font = '700 16px Arial, Helvetica, sans-serif';
+    x.fillText('BONUS  \u2022  TEAM FOULS 6', 22, ch - 24);
+    liveDot(x, cw, t);
+
+  } else if (f.kind === 'baseball') {
+    x.fillStyle = '#0d2a17'; x.fillRect(0, 0, cw, ch);
+    x.fillStyle = '#5d3a1f';
+    x.beginPath(); x.arc(cw / 2, ch + 40, 190, Math.PI, 0); x.fill();
+    x.fillStyle = '#123a20';
+    x.beginPath(); x.arc(cw / 2, ch + 40, 150, Math.PI, 0); x.fill();
+    bug(x, cw, 0, ['PIONEERS', 3], ['RAIL KINGS', 2], ['TOP 7', 'OUT 1']);
+    // bases diamond
+    const bx = cw - 74, by = ch - 78, r = 13, on = [1, 0, 1];
+    [[0, -26], [26, 0], [0, 26]].forEach((p, i) => {
+      x.save(); x.translate(bx + p[0], by + p[1]); x.rotate(Math.PI / 4);
+      x.fillStyle = on[i] ? '#ffd166' : 'rgba(255,255,255,0.22)';
+      x.fillRect(-r / 1.4, -r / 1.4, r * 1.4, r * 1.4);
+      x.restore();
+    });
+    // count
+    const b = Math.floor(t) % 4, s = Math.floor(t * 0.7) % 3;
+    x.fillStyle = '#e9edf5'; x.font = '700 17px Arial, Helvetica, sans-serif';
+    x.fillText('B', 24, ch - 74); x.fillText('S', 24, ch - 46); x.fillText('O', 24, ch - 18);
+    for (let i = 0; i < 3; i++) {
+      const dot = (yy, active, col) => {
+        x.beginPath(); x.arc(56 + i * 26, yy, 8, 0, 7);
+        x.fillStyle = active ? col : 'rgba(255,255,255,0.18)'; x.fill();
+      };
+      dot(ch - 80, i < b, '#35d07a');
+      dot(ch - 52, i < s, '#ffd166');
+      dot(ch - 24, i < 1, '#ff3b3b');
+    }
+    liveDot(x, cw, t);
+
+  } else if (f.kind === 'ticker') {
+    x.fillStyle = '#080a10'; x.fillRect(0, 0, cw, ch);
+    x.fillStyle = '#ff3b3b'; x.fillRect(0, 0, cw, 46);
+    x.fillStyle = '#fff'; x.font = '800 22px Arial, Helvetica, sans-serif';
+    x.fillText('SCOREBOARD', 20, 32);
+    x.textAlign = 'right';
+    x.fillStyle = 'rgba(255,255,255,0.8)'; x.font = '700 16px Arial, Helvetica, sans-serif';
+    x.fillText('AROUND THE LEAGUES', cw - 20, 31);
+    x.textAlign = 'left';
+    x.save();
+    x.beginPath(); x.rect(0, 52, cw, ch - 92); x.clip();
+    const span = TICKER.length * 40, off = (t * 26) % span;
+    for (let pass = 0; pass < 2; pass++) {
+      TICKER.forEach((row, i) => {
+        const y = 84 + i * 40 - off + pass * span;
+        x.fillStyle = i % 2 ? 'rgba(255,255,255,0.04)' : 'transparent';
+        x.fillRect(0, y - 24, cw, 36);
+        x.fillStyle = '#dfe6f2'; x.font = '700 17px Arial, Helvetica, sans-serif';
+        x.fillText(row[0], 20, y);
+        x.fillText(row[2], 210, y);
+        x.fillStyle = row[1] > row[3] ? '#ffd166' : '#8f98a8';
+        x.fillText(String(row[1]), 170, y);
+        x.fillStyle = row[3] > row[1] ? '#ffd166' : '#8f98a8';
+        x.fillText(String(row[3]), 388, y);
+        x.fillStyle = row[4] === 'FINAL' ? '#8f98a8' : '#ff5a5a';
+        x.font = '700 14px Arial, Helvetica, sans-serif';
+        x.fillText(row[4], 440, y);
+      });
+    }
+    x.restore();
+    x.fillStyle = '#2b6cff'; x.fillRect(0, ch - 34, cw, 34);
+    x.fillStyle = '#fff'; x.font = '700 16px Arial, Helvetica, sans-serif';
+    const msg = 'HAPPY HOUR TILL 7   \u2022   WINGS 50\u00A2   \u2022   NEXT KICKOFF 8:15   \u2022   ';
+    const w = x.measureText(msg).width;
+    const sx = -((t * 60) % w);
+    x.fillText(msg, sx, ch - 12); x.fillText(msg, sx + w, ch - 12);
+
+  } else {
+    x.fillStyle = '#120c06'; x.fillRect(0, 0, cw, ch);
+    x.fillStyle = '#ffb347'; x.font = '800 24px Arial, Helvetica, sans-serif';
+    x.fillText('ON TAP & KITCHEN', 24, 40);
+    x.fillStyle = '#4a3218'; x.fillRect(24, 52, cw - 48, 3);
+    x.save();
+    x.beginPath(); x.rect(0, 60, cw, ch - 60); x.clip();
+    const span = TAP_LIST.length * 44, off = (t * 22) % span;
+    for (let pass = 0; pass < 2; pass++) {
+      TAP_LIST.forEach((row, i) => {
+        const y = 98 + i * 44 - off + pass * span;
+        x.fillStyle = '#efe2cd'; x.font = '600 21px Arial, Helvetica, sans-serif';
+        x.fillText(row[0], 28, y);
+        x.textAlign = 'right'; x.fillStyle = '#ff6b6b';
+        x.fillText(row[1], cw - 28, y); x.textAlign = 'left';
+      });
+    }
+    x.restore();
+  }
+  f.tex.needsUpdate = true;
+}
+
+let feedIndex = 0;
+function tv(x, y, z, ry, w, margin) {
+  const h = w * 0.5625;                       // 16:9
+  const m = margin === undefined ? 0.05 : margin;
+  const g = new THREE.Group();
+  const bezel = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.07), tvMat);
+  bezel.position.z = -0.035;
+  g.add(bezel);
+  const scr = new THREE.Mesh(
+    new THREE.PlaneGeometry(w - m * 2, h - m * 2),
+    new THREE.MeshBasicMaterial({ map: feeds[feedIndex++ % feeds.length].tex })
+  );
+  scr.position.z = 0.012;
+  g.add(scr);
+  if (m > 0.03) {
+    const s = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.22, 0.012), glowMat);
+    s.position.set(0, -h / 2 + 0.024, 0.012);
+    g.add(s);
+  }
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.09), tvMat);
+  arm.position.z = -0.1;
+  g.add(arm);
+  g.position.set(x, y, z);
+  g.rotation.y = ry;
+  scene.add(g);
+}
+
+// Beams sit at z = -4.8, -2.4, 0, 2.4, 4.8, so the side walls have four 2.1m bays.
+const TV_W = 2.0, TV_Y = 2.70;
+[-3.6, -1.2, 1.2, 3.6].forEach(z => {
+  tv(-W / 2 + 0.09, TV_Y, z,  Math.PI / 2, TV_W);
+  tv( W / 2 - 0.09, TV_Y, z, -Math.PI / 2, TV_W);
+});
+[-5.4, -3.0, 3.0, 5.4].forEach(x => tv(x, TV_Y, D / 2 - 0.09, Math.PI, TV_W));
+
+const PANEL = 1.96;
+for (let i = 0; i < 8; i++) {
+  tv(-PANEL * 3.5 + i * PANEL, 2.97, -D / 2 + 0.09, 0, PANEL, 0.02);
+}
+
+feeds.forEach(f => paint(f, 0));
+
+// ---------------------------------------------------------------- lighting
+scene.add(new THREE.AmbientLight(0x161a22, 0.38));
+scene.add(new THREE.HemisphereLight(0x1e2733, 0x07070a, 0.26));
+
+function pendant(x, z, intensity, shadow, color) {
+  const g = new THREE.Group();
+  cyl(0.01, 0.01, 0.9, mat.dark, 0, H - 0.45, 0, 6, g);
+  cyl(0.34, 0.34, 0.05, mat.shell, 0, H - 0.95, 0, 24, g);
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.16, 0.32, 28),
+    new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide })
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = H - 0.98;
+  g.add(ring);
+  const light = new THREE.PointLight(color, intensity, 12, 2);
+  light.position.y = H - 1.05;
+  if (shadow) {
+    light.castShadow = true;
+    light.shadow.mapSize.set(512, 512);
+    light.shadow.bias = -0.004;
+  }
+  g.add(light);
+  g.position.set(x, 0, z);
+  scene.add(g);
+}
+// nothing hangs over the bar any more - it is lit from concealed sources
+pendant(3.2, 2.2, 0.7, false, 0x8fa6c4);
+
+// two concealed washes down the length of the counter
+[-2.8, 2.8].forEach(dx => {
+  const w = new THREE.PointLight(0xc4d8ec, 2.0, 7.5, 2);
+  w.position.set(barX + dx, 2.25, BAR_Z + 0.15);
+  scene.add(w);
+});
+
+// warm backlight behind the bottles, the one warm note left in the room
+const backGlow = new THREE.PointLight(0xffa347, 2.0, 7.5, 2);
+backGlow.position.set(barX, 1.9, BACK_Z + 0.5);
+scene.add(backGlow);
+
+/* =====================================================================
+   RAIN FROM THE CEILING
+   Columns of glyphs that drop out of the ceiling and fall to the floor,
+   so looking up you see code raining down on you.
+   ===================================================================== */
+let FALL = null;
+function buildFallingRain() {
+  const chars = GLYPHS;
+  const G = 8, S = 512, cell = S / G;                       // 8x8 glyph atlas
+  const c = document.createElement("canvas");
+  c.width = c.height = S;
+  const x = c.getContext("2d");
+  x.fillStyle = "#fff"; x.textAlign = "center"; x.textBaseline = "middle";
+  x.font = `${Math.round(cell * 0.8)}px monospace`;
+  for (let i = 0; i < G * G; i++) {
+    x.fillText(chars.charAt(i % chars.length), (i % G) * cell + cell / 2, Math.floor(i / G) * cell + cell / 2);
+  }
+  const atlas = new THREE.CanvasTexture(c);
+  atlas.minFilter = THREE.LinearFilter;
+
+  const COLORS = RAIN_COLORS.map(h => new THREE.Color(h));
+  const STREAMS = touch ? 36 : 70;    // how many falling columns
+  const TRAIL = 7;                    // glyphs per column
+  const N = STREAMS * TRAIL;
+  const pos = new Float32Array(N * 3), info = new Float32Array(N * 4), col = new Float32Array(N * 3);
+  let k = 0;
+  for (let s = 0; s < STREAMS; s++) {
+    const sx = (Math.random() - 0.5) * (ROOM.hw * 2 - 1);
+    const sz = (Math.random() - 0.5) * (ROOM.hd * 2 - 1);
+    const speed = 0.55 + Math.random() * 0.8;   // meters per second
+    const phase = Math.random();
+    const color = COLORS[Math.floor(Math.random() * COLORS.length)];
+    for (let t = 0; t < TRAIL; t++, k++) {
+      pos[k * 3] = sx; pos[k * 3 + 1] = 0; pos[k * 3 + 2] = sz;
+      info[k * 4] = speed; info[k * 4 + 1] = phase; info[k * 4 + 2] = t; info[k * 4 + 3] = Math.random();
+      col[k * 3] = color.r; col[k * 3 + 1] = color.g; col[k * 3 + 2] = color.b;
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute("aInfo", new THREE.BufferAttribute(info, 4));
+  geo.setAttribute("aColor", new THREE.BufferAttribute(col, 3));
+
+  FALL = new THREE.ShaderMaterial({
+    uniforms: {
+      uAtlas: { value: atlas }, uTime: { value: reduced ? 7.3 : 0 }, uScale: { value: 1 },
+      uCeil: { value: ROOM.h }, uTrail: { value: TRAIL }, uDuty: { value: 0.05 }
+    },
+    vertexShader: `
+      attribute vec4 aInfo; attribute vec3 aColor;
+      uniform float uTime; uniform float uScale; uniform float uCeil; uniform float uTrail; uniform float uDuty;
+      varying vec3 vColor; varying float vAlpha; varying float vGlyph;
+      const float GAP = 0.2;
+      void main(){
+        float span = uCeil + uTrail * GAP + 2.5;
+        float cycle = span / uDuty;                         // long idle gap between drops
+        float fall = mod(uTime * aInfo.x + aInfo.y * cycle, cycle);
+        float y = uCeil - fall + aInfo.z * GAP;             // head at the bottom, trail above it
+        float visible = step(0.0, y) * step(y, uCeil - 0.05);
+        vAlpha = visible * pow(1.0 - aInfo.z / uTrail, 1.6);
+        vColor = mix(aColor, vec3(1.0), step(aInfo.z, 0.5) * 0.75);  // bright white-ish head
+        vGlyph = floor(mod(aInfo.w * 64.0 + floor(uTime * (2.0 + aInfo.w * 6.0)), 64.0));
+        vec4 mv = modelViewMatrix * vec4(position.x, y, position.z, 1.0);
+        vAlpha *= exp(-${(FOG * FOG).toFixed(5)} * mv.z * mv.z);
+        gl_PointSize = min(0.2 * uScale / max(-mv.z, 0.1), 96.0) * visible;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform sampler2D uAtlas;
+      varying vec3 vColor; varying float vAlpha; varying float vGlyph;
+      void main(){
+        if (vAlpha < 0.01) discard;
+        float cx = mod(vGlyph, 8.0), cy = floor(vGlyph / 8.0);
+        vec2 uv = vec2((cx + gl_PointCoord.x) / 8.0, (8.0 - cy - gl_PointCoord.y) / 8.0);
+        float g = texture2D(uAtlas, uv).a;
+        gl_FragColor = vec4(vColor * g * vAlpha * 1.2, 1.0);
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+  });
+  const pts = new THREE.Points(geo, FALL);
+  pts.frustumCulled = false;
+  scene.add(pts);
+  updateFallScale();
+}
+function updateFallScale() {
+  if (!FALL) return;
+  FALL.uniforms.uScale.value = renderer.getPixelRatio() * innerHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+}
+buildFallingRain();
+
+// ---------------------------------------------------------------- collision
+const blockers = [
+  { x: barX, z: BAR_Z, hw: BAR_LEN / 2 + 0.2, hd: BAR_W / 2 + 0.3 },
+  { x: barX, z: BACK_Z, hw: BAR_LEN / 2, hd: 0.4 },
+];
+TABLES.forEach(([x, z]) => blockers.push({ x, z, hw: 0.75, hd: 0.75 }));
+BOOTHS.forEach(([x, z, ry, sides]) => {
+  const turned = Math.abs(Math.sin(ry)) > 0.5;
+  const one = sides && sides.length === 1;
+  const half = one ? 0.78 : BOOTH_W / 2;           // one bench plus its table
+  const shift = one ? sides[0] * 0.2 : 0;          // sits off-centre toward the bench
+  blockers.push({
+    x: x + shift * Math.cos(ry),
+    z: z - shift * Math.sin(ry),
+    hw: turned ? BOOTH_D / 2 : half,
+    hd: turned ? half : BOOTH_D / 2
+  });
+});
+
+blockers.push({ x: JUKE_X, z: JUKE_Z, hw: 0.4, hd: 0.72 });
+blockers.push({ x: TAPWALL_X, z: TAPWALL_Z, hw: TAPWALL_W / 2, hd: 0.2 });
+
+const RADIUS = 0.35;
+function resolve(pos) {
+  pos.x = Math.max(-W / 2 + RADIUS, Math.min(W / 2 - RADIUS, pos.x));
+  pos.z = Math.max(-D / 2 + RADIUS, Math.min(D / 2 - RADIUS, pos.z));
+  for (const b of blockers) {
+    const dx = pos.x - b.x, dz = pos.z - b.z;
+    const ox = b.hw + RADIUS - Math.abs(dx);
+    const oz = b.hd + RADIUS - Math.abs(dz);
+    if (ox > 0 && oz > 0) {
+      if (ox < oz) pos.x += Math.sign(dx || 1) * ox;
+      else pos.z += Math.sign(dz || 1) * oz;
+    }
+  }
+}
+
+// ---------------------------------------------------------------- controls
+const canvas = renderer.domElement;
+canvas.tabIndex = 0;
+const hud  = document.getElementById('hud');
+const hint = document.getElementById('hint');
+
+const keys = {};
+const swallow = ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'];
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (swallow.includes(e.code)) e.preventDefault();
+  if (e.code === 'KeyR' && !e.repeat) rainLive = !rainLive;
+});
+addEventListener('keyup',   e => { keys[e.code] = false; });
+
+let yaw = 0;            // 0 looks down -Z, straight at the bar
+let pitch = 0;          // clamped just short of straight up / straight down
+const PITCH_MAX = 1.45;
+let rainLive = false;   // wall rain starts frozen
+let started = false, dragMode = false, dragging = false, lastX = 0, lastY = 0;
+let lastDownX = 0, lastDownY = 0;
+const clampPitch = () => { pitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, pitch)); };
+
+const locked = () => document.pointerLockElement === canvas;
+
+function useDrag() {
+  if (dragMode) return;
+  dragMode = true;
+  hint.textContent = 'drag the mouse to look around';
+  canvas.style.cursor = 'grab';
+}
+
+function enter() {
+  started = true;
+  if (listener.context.state === 'suspended') listener.context.resume();
+  if (AUTOPLAY && PLAYER.count() && PLAYER.isIdle()) PLAYER.toggle();
+  hud.style.display = 'none';
+  canvas.focus();
+  try { window.focus(); } catch (e) {}
+  let req;
+  try { req = canvas.requestPointerLock && canvas.requestPointerLock(); } catch (e) { useDrag(); }
+  if (req && typeof req.catch === 'function') req.catch(useDrag);
+  setTimeout(() => { if (!locked()) useDrag(); }, 400);
+}
+
+hud.addEventListener('click', enter);
+canvas.addEventListener('click', e => {
+  if (!started) return enter();
+  if (panelOpen) return;
+  const slipped = Math.abs(e.clientX - lastDownX) + Math.abs(e.clientY - lastDownY);
+  if (!locked() && slipped > 6) return;       // that was a look-around drag, not a click
+  if (lookingAtJukebox()) openPanel();
+});
+document.addEventListener('pointerlockerror', useDrag);
+document.addEventListener('pointerlockchange', () => {
+  if (locked()) {
+    dragMode = false;
+    hud.style.display = 'none';
+    hint.textContent = 'esc to release the mouse';
+    canvas.style.cursor = 'none';
+  } else if (started && !dragMode && !panelOpen && !reLock) {
+    started = false;
+    hud.style.display = 'flex';
+    canvas.style.cursor = 'default';
+    cross.style.display = 'none';
+    prompt.style.display = 'none';
+  } else if (panelOpen) {
+    canvas.style.cursor = 'default';
+  }
+});
+
+document.addEventListener('mousemove', e => {
+  if (locked()) {
+    yaw -= e.movementX * 0.0022;
+    pitch -= e.movementY * 0.0022;
+  } else if (dragging) {
+    yaw   += (e.clientX - lastX) * 0.005;
+    pitch += (e.clientY - lastY) * 0.005;
+    lastX = e.clientX; lastY = e.clientY;
+  }
+  clampPitch();
+});
+canvas.addEventListener('mousedown', e => {
+  if (locked()) return;
+  dragging = true; lastX = lastDownX = e.clientX; lastY = lastDownY = e.clientY;
+  canvas.style.cursor = 'grabbing';
+});
+addEventListener('mouseup', () => { dragging = false; if (dragMode) canvas.style.cursor = 'grab'; });
+
+canvas.addEventListener('touchstart', e => {
+  if (!started) enter();
+  dragging = true; lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+}, { passive: true });
+canvas.addEventListener('touchmove', e => {
+  if (!dragging) return;
+  yaw   += (e.touches[0].clientX - lastX) * 0.006;
+  pitch += (e.touches[0].clientY - lastY) * 0.006;
+  lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+  clampPitch();
+}, { passive: true });
+canvas.addEventListener('touchend', () => { dragging = false; });
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  let d = e.deltaY;
+  if (e.deltaMode === 1) d *= 16;
+  else if (e.deltaMode === 2) d *= 400;
+  const step = Math.max(-0.7, Math.min(0.7, -d * 0.004));
+  camera.position.x += -Math.sin(yaw) * step;
+  camera.position.z += -Math.cos(yaw) * step;
+  resolve(camera.position);
+}, { passive: false });
+
+/* ----------------------------------------------------------------------
+   HOLOGRAM FIGURES
+   A photo made to read as a solid figure: it turns to follow you, the image
+   is warped over a cylinder so features shift against the outline as you
+   move, and the backdrop colour is keyed out. Used for the bartender and
+   for the regular sitting in the corner booth.
+   ---------------------------------------------------------------------- */
+const HOLO_VERT = `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }`;
+
+const HOLO_FRAG = `
+  uniform sampler2D uMap;
+  uniform vec3 uKey, uTint;
+  uniform float uTol, uSoft, uTime, uOpacity, uFlicker;
+  uniform vec2 uParallax;
+  varying vec2 vUv;
+
+  float keyed(vec2 uv) {
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return 0.0;
+    return smoothstep(uTol, uTol + uSoft, distance(texture2D(uMap, uv).rgb, uKey));
+  }
+  float hash(float n) { return fract(sin(n) * 43758.5453); }
+
+  void main() {
+    // treat the figure as a cylinder: centre sits proud, edges fall away
+    float cx = (vUv.x - 0.5) * 2.0;
+    float round = sqrt(max(0.0, 1.0 - cx * cx));
+    vec2 uv = vUv + uParallax * round;
+
+    float band = floor(vUv.y * 26.0);
+    float glitch = step(0.986, hash(band + floor(uTime * 8.0)));
+    uv.x += glitch * (hash(band) - 0.5) * 0.05;
+
+    float a = keyed(uv);
+    if (a < 0.02) discard;
+
+    vec3 src = texture2D(uMap, uv).rgb;
+    float lum = dot(src, vec3(0.299, 0.587, 0.114));
+    vec3 col = uTint * (0.30 + lum * 1.25);
+
+    float rim = abs(a - keyed(uv + vec2(0.007, 0.0)))
+              + abs(a - keyed(uv + vec2(0.0, 0.007)));
+    col += vec3(0.55, 0.9, 1.0) * clamp(rim, 0.0, 1.0) * 1.5;
+    col *= 0.72 + 0.28 * round;                                     // curve shading
+    col *= 0.87 + 0.13 * sin(vUv.y * 430.0 - uTime * 4.5);          // scanlines
+    float sweep = smoothstep(0.05, 0.0, abs(vUv.y - fract(uTime * 0.17)));
+    col += vec3(0.35, 0.75, 1.0) * sweep * 0.7;                     // rising band
+
+    a *= uOpacity * uFlicker;
+    a *= smoothstep(0.0, 0.10, vUv.y);
+    gl_FragColor = vec4(col, a);
+  }`;
+
+function createHologram(opt) {
+  const HEIGHT = opt.height, BASE = opt.base || 0;
+  const CLAMP = opt.clamp === undefined ? 0.95 : opt.clamp;
+  const PARALLAX = opt.parallax === undefined ? 0.055 : opt.parallax;
+  const TINT = opt.tint || [0.42, 0.86, 1.0];
+
+  const g = new THREE.Group();
+  g.position.set(opt.pos[0], 0, opt.pos[1]);
+  g.rotation.y = opt.facing || 0;
+  scene.add(g);
+
+  const base = {
+    uMap:      { value: null },
+    uKey:      { value: new THREE.Vector3() },
+    uTol:      { value: opt.keyTol === undefined ? 0.30 : opt.keyTol },
+    uSoft:     { value: 0.12 },
+    uTime:     { value: 0 },
+    uOpacity:  { value: 0.94 },
+    uFlicker:  { value: 1 },
+    uParallax: { value: new THREE.Vector2() },
+    uTint:     { value: new THREE.Vector3().fromArray(TINT) }
+  };
+  const mkMat = blend => new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.clone(base),
+    vertexShader: HOLO_VERT, fragmentShader: HOLO_FRAG,
+    transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: blend
+  });
+
+  const body = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mkMat(THREE.NormalBlending));
+  const aura = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mkMat(THREE.AdditiveBlending));
+  aura.material.uniforms.uOpacity.value = 0.3;
+  aura.position.z = -0.05;
+  const mats = [body.material, aura.material];
+  g.add(aura, body);
+
+  let pool = null;
+  if (opt.pool !== false) {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const x = c.getContext('2d');
+    const gr = x.createRadialGradient(64, 64, 2, 64, 64, 62);
+    gr.addColorStop(0, 'rgba(130,215,255,0.85)');
+    gr.addColorStop(1, 'rgba(130,215,255,0)');
+    x.fillStyle = gr; x.fillRect(0, 0, 128, 128);
+    pool = new THREE.Mesh(
+      new THREE.PlaneGeometry(HEIGHT * 0.8, HEIGHT * 0.55),
+      new THREE.MeshBasicMaterial({
+        map: new THREE.CanvasTexture(c), transparent: true, opacity: 0.5,
+        blending: THREE.AdditiveBlending, depthWrite: false
+      })
+    );
+    pool.rotation.x = -Math.PI / 2;
+    pool.position.y = BASE + 0.02;
+    g.add(pool);
+  }
+
+  let lamp = null;
+  if (opt.lamp !== false) {
+    lamp = new THREE.PointLight(0x7fd4ff, 0.9, 4.5, 2);
+    lamp.position.set(0, BASE + HEIGHT * 0.8, 0.4);
+    g.add(lamp);
+  }
+
+  function fit(img) {
+    const w = HEIGHT * (img.width / img.height);
+    body.scale.set(w, HEIGHT, 1);
+    aura.scale.set(w * 1.05, HEIGHT * 1.05, 1);
+    body.position.y = BASE + HEIGHT / 2;
+    aura.position.y = BASE + HEIGHT / 2;
+  }
+  function autoKey(img) {
+    if (opt.keyColor) return new THREE.Vector3().fromArray(opt.keyColor);
+    const n = 64, c = document.createElement('canvas');
+    c.width = c.height = n;
+    const x = c.getContext('2d');
+    x.drawImage(img, 0, 0, n, n);
+    const d = x.getImageData(0, 0, n, n).data;
+    let r = 0, gg = 0, b = 0, k = 0;
+    const take = (px, py) => { const i = (py * n + px) * 4; r += d[i]; gg += d[i+1]; b += d[i+2]; k++; };
+    for (let i = 0; i < n; i++) { take(i, 0); take(i, n-1); take(0, i); take(n-1, i); }
+    return new THREE.Vector3(r / k / 255, gg / k / 255, b / k / 255);
+  }
+  function apply(img, tex) {
+    const key = autoKey(img);
+    mats.forEach(m => { m.uniforms.uMap.value = tex; m.uniforms.uKey.value.copy(key); });
+    fit(img);
+  }
+
+  // stand-in so the figure is visible before the photo is added
+  function placeholder() {
+    const seated = opt.placeholder === 'sit';
+    const c = document.createElement('canvas');
+    c.width = 256; c.height = seated ? 288 : 448;
+    const x = c.getContext('2d');
+    x.fillStyle = '#000'; x.fillRect(0, 0, c.width, c.height);
+    x.fillStyle = '#cfd8e6';
+    if (seated) {
+      x.beginPath(); x.arc(128, 58, 40, 0, 7); x.fill();
+      x.beginPath(); x.moveTo(74, 232); x.lineTo(84, 142);
+      x.quadraticCurveTo(128, 100, 172, 142); x.lineTo(182, 232); x.closePath(); x.fill();
+      x.fillRect(58, 232, 140, 40);                     // thighs
+      x.fillStyle = '#8fa6bd'; x.fillRect(104, 142, 48, 90);
+    } else {
+      x.beginPath(); x.arc(128, 82, 46, 0, 7); x.fill();
+      x.beginPath(); x.moveTo(52, 448); x.lineTo(70, 190);
+      x.quadraticCurveTo(128, 140, 186, 190); x.lineTo(204, 448); x.closePath(); x.fill();
+      x.fillStyle = '#8fa6bd'; x.fillRect(96, 190, 64, 258);
+    }
+    apply(c, new THREE.CanvasTexture(c));
+  }
+
+  new THREE.TextureLoader().load(opt.src, tex => apply(tex.image, tex), undefined, placeholder);
+
+  return {
+    update(elapsed, dt) {
+      if (CLAMP > 0) {
+        const want = Math.atan2(camera.position.x - g.position.x, camera.position.z - g.position.z);
+        const rest = opt.facing || 0;
+        const aim = rest + Math.max(-CLAMP, Math.min(CLAMP, want - rest));
+        g.rotation.y += (aim - g.rotation.y) * Math.min(1, dt * 3);
+      }
+      const local = body.worldToLocal(camera.position.clone());
+      const len = local.length() || 1;
+      const flick = 0.93 + Math.sin(elapsed * 23.0) * 0.03 + Math.sin(elapsed * 7.3) * 0.04;
+      mats.forEach(m => {
+        m.uniforms.uTime.value = elapsed;
+        m.uniforms.uFlicker.value = flick;
+        m.uniforms.uParallax.value.set(local.x / len * PARALLAX, local.y / len * PARALLAX * 0.4);
+      });
+      if (pool) pool.material.opacity = 0.38 + Math.sin(elapsed * 2.1) * 0.06;
+      if (lamp) lamp.intensity = 0.8 + (flick - 0.93) * 2.0;
+    }
+  };
+}
+
+// ---- the bartender, standing behind the bar ----------------------------
+const BARTENDER = createHologram({
+  src: 'bartender.jpg',
+  height: 1.92, base: 0, pos: [-0.4, -4.55],
+  placeholder: 'stand'
+});
+
+// ---- the regular, sitting in the corner booth with his back to the wall -
+// bench centre works out to x 7.10, backrest at z -5.90
+const PATRON = createHologram({
+  src: 'patron.png',
+  height: 1.06,            // seat cushion to top of head
+  base: 0.52,              // cushion height
+  pos: [7.12, -5.68],
+  facing: 0,               // looking out of the booth, back to the wall
+  clamp: 0.45,             // only a small turn; he is wedged into a corner
+  parallax: 0.045,
+  pool: false, lamp: false,
+  placeholder: 'sit'
+});
+
+/* ----------------------------------------------------------------------
+   PLAYLIST MANIFEST
+   Looks for playlist.json beside this page (override with ?playlist=URL).
+   Missing or broken manifest just means the file picker is the only source.
+   ---------------------------------------------------------------------- */
+let AUTOPLAY = false;
+const PLAYLIST_URL = new URLSearchParams(location.search).get('playlist') || 'playlist.json';
+
+fetch(PLAYLIST_URL, { cache: 'no-cache' })
+  .then(r => r.ok ? r.json() : Promise.reject(r.status))
+  .then(data => {
+    const root = new URL(PLAYLIST_URL, location.href);
+    const base = data.baseUrl || '';
+    const list = (data.tracks || []).map(t => {
+      const file = t.file || t.url || '';
+      const title = t.title || file.split('/').pop().replace(/\.[^.]+$/, '');
+      return {
+        name: t.artist ? title + '  \u2014  ' + t.artist : title,
+        url: new URL(base + file, root).href
+      };
+    }).filter(t => t.url);
+    AUTOPLAY = data.autoplay !== false;
+    PLAYER.addRemote(list, AUTOPLAY);
+    const src = document.getElementById('jb-src');
+    if (!list.length) PLAYER.setStatus('playlist.json lists no tracks');
+    if (src) src.textContent = list.length
+      ? list.length + ' track' + (list.length === 1 ? '' : 's') + ' on the machine'
+      : 'playlist.json is empty';
+  })
+  .catch(err => {
+    PLAYER.setStatus('playlist unavailable');
+    const src = document.getElementById('jb-src');
+    if (src) src.textContent = 'could not load playlist.json (' + err + ')';
+  });
+
+// ---------------------------------------------------------------- jukebox UI
+const jb = document.getElementById('jb');
+const cross = document.getElementById('cross');
+const prompt = document.getElementById('prompt');
+const raycaster = new THREE.Raycaster();
+const CENTER = new THREE.Vector2(0, 0);
+const mouseNDC = new THREE.Vector2(0, 0);
+let panelOpen = false, aiming = false, reLock = false;
+
+function openPanel() {
+  if (panelOpen) return;
+  panelOpen = true;
+  jb.style.display = 'block';
+  prompt.style.display = 'none';
+  cross.style.display = 'none';
+  for (const k in keys) keys[k] = false;      // don't keep walking while typing
+  PLAYER.render();
+  if (locked()) { reLock = true; document.exitPointerLock(); }
+}
+function closePanel() {
+  if (!panelOpen) return;
+  panelOpen = false;
+  jb.style.display = 'none';
+  if (reLock) { reLock = false; canvas.requestPointerLock(); }
+}
+
+document.getElementById('jb-close').addEventListener('click', closePanel);
+document.getElementById('jb-prev').addEventListener('click', () => PLAYER.prev());
+document.getElementById('jb-next').addEventListener('click', () => PLAYER.next());
+document.getElementById('jb-play').addEventListener('click', () => PLAYER.toggle());
+document.getElementById('jb-vol').addEventListener('input', e => PLAYER.setVolume(+e.target.value));
+
+addEventListener('keydown', e => {
+  if (e.code === 'KeyJ' && !e.repeat) panelOpen ? closePanel() : openPanel();
+  if (e.code === 'Escape' && panelOpen) closePanel();
+});
+
+// track the cursor for drag-mode picking; pointer lock aims from the middle
+canvas.addEventListener('mousemove', e => {
+  const r = canvas.getBoundingClientRect();
+  mouseNDC.set((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+});
+
+function lookingAtJukebox() {
+  raycaster.setFromCamera(locked() ? CENTER : mouseNDC, camera);
+  const hit = raycaster.intersectObject(JUKEBOX.group, true)[0];
+  return !!hit && hit.distance < 4.5;
+}
+
+// ---------------------------------------------------------------- loop
+const velocity = new THREE.Vector3();
+const clock = new THREE.Clock();
+let elapsed = 0, repaint = 0, rainTick = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  elapsed += dt;
+
+  // wall rain is a frozen still unless the R key turns it back on
+  if (rainLive) {
+    rainTick += dt;
+    if (rainTick > 0.066) {
+      RAIN.update(performance.now());
+      rainTextures.forEach(t => { t.needsUpdate = true; });
+      rainTick = 0;
+    }
+  }
+  if (FALL && !reduced) FALL.uniforms.uTime.value = elapsed;
+  JUKEBOX.update(elapsed, dt);
+  BARTENDER.update(elapsed, dt);
+  PATRON.update(elapsed, dt);
+
+  if (started && !panelOpen) {
+    aiming = lookingAtJukebox();
+    prompt.style.display = aiming ? 'block' : 'none';
+    cross.style.display = locked() ? 'block' : 'none';
+  }
+
+  // screens only need ~12fps, which keeps the canvas work off the critical path
+  repaint += dt;
+  if (repaint > 1 / 12) { feeds.forEach(f => paint(f, elapsed)); repaint = 0; }
+
+  // arrows look around, WASD moves - so the room works with no mouse at all
+  const turn = panelOpen ? 0 : (keys.ArrowLeft || keys.KeyQ ? 1 : 0) - (keys.ArrowRight || keys.KeyE ? 1 : 0);
+  yaw += turn * 1.9 * dt;
+  const tilt = (keys.ArrowUp ? 1 : 0) - (keys.ArrowDown ? 1 : 0);
+  if (tilt) { pitch += tilt * 1.4 * dt; clampPitch(); }
+
+  const f = panelOpen ? 0 : (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0);
+  const s = panelOpen ? 0 : (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
+  const speed = keys.ShiftLeft || keys.ShiftRight ? 5.0 : 2.6;
+
+  const dir = new THREE.Vector3(
+    Math.sin(yaw) * -f + Math.cos(yaw) * s,
+    0,
+    Math.cos(yaw) * -f - Math.sin(yaw) * s
+  );
+  if (dir.lengthSq() > 0) dir.normalize();
+
+  velocity.lerp(dir.multiplyScalar(speed), 1 - Math.pow(0.0008, dt));
+  camera.position.addScaledVector(velocity, dt);
+  camera.position.y = EYE;
+  resolve(camera.position);
+
+  camera.rotation.set(pitch, yaw, 0);   // YXZ order, so roll stays at zero
+  renderer.render(scene, camera);
+}
+animate();
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  updateFallScale();
+});
+</script>
+</body>
+</html>

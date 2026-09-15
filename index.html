@@ -33,6 +33,26 @@
     background:rgba(8,8,12,.85); border:1px solid #ff3b3b; color:#ffe6b0;
     font:700 12px/1 Arial, Helvetica, sans-serif; letter-spacing:.14em; z-index:15;
   }
+  #exit {
+    position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:25;
+    display:none; width:320px; padding:22px 24px 20px; text-align:center;
+    background:rgba(10,8,6,.97); color:#e9e2d4; border:1px solid #6b3a1c; border-radius:6px;
+    box-shadow:0 0 0 1px rgba(255,59,59,.35), 0 0 40px rgba(0,0,0,.6);
+    font:400 13px/1.5 Arial, Helvetica, sans-serif;
+  }
+  .exit-q {
+    margin:0 0 4px; font:800 22px/1.2 "Arial Black", Impact, sans-serif;
+    letter-spacing:.06em; color:#fff;
+  }
+  .exit-sub { margin:0 0 16px; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#8b7a63; }
+  .exit-row { display:flex; gap:10px; }
+  .exit-row button {
+    flex:1; padding:10px 0; cursor:pointer; border-radius:3px; font:700 12px/1 Arial, sans-serif;
+    letter-spacing:.08em; background:#1d140b; border:1px solid #6b3a1c; color:#e9e2d4;
+  }
+  #exit-go:hover { border-color:#ff3b3b; color:#fff; }
+  #exit-stay:hover { border-color:#8b7a63; }
+  #exit-go[disabled] { opacity:.45; cursor:not-allowed; }
   #stick {
     position:fixed; left:24px; bottom:28px; width:132px; height:132px; display:none;
     border-radius:50%; background:rgba(10,14,20,.42); border:2px solid rgba(255,255,255,.22);
@@ -55,6 +75,7 @@
     padding:10px 12px; background:linear-gradient(90deg, rgba(255,59,59,.35), rgba(43,108,255,.3));
     font:800 15px/1 "Arial Black", Impact, sans-serif; letter-spacing:.14em; color:#fff;
   }
+  .jb-head { cursor:move; touch-action:none; }
   .jb-head button { background:none; border:0; color:#ffd7d7; font-size:15px; cursor:pointer; }
   .jb-note {
     margin:10px 12px; font-size:11px; color:#8b7a63;
@@ -87,6 +108,15 @@
 <div id="hint">esc to release the mouse</div>
 <div id="prompt">JUKEBOX &mdash; click</div>
 <div id="stick"><div id="knob"></div></div>
+
+<div id="exit">
+  <p class="exit-q">Leave The Pub?</p>
+  <p class="exit-sub" id="exit-sub">&nbsp;</p>
+  <div class="exit-row">
+    <button id="exit-go">Head out</button>
+    <button id="exit-stay">Another Beer</button>
+  </div>
+</div>
 
 <div id="jb">
   <div class="jb-head"><span>JUKEBOX</span><button id="jb-close" title="close">&#10005;</button></div>
@@ -849,14 +879,15 @@ scene.add(sign);
 
 // ---------------------------------------------------------------- the exit
 const DOOR_Z = D / 2 - 0.07;
-box(1.44, 2.36, 0.10, mat.steel, 0, 1.18, DOOR_Z);            // steel frame
-box(1.20, 2.20, 0.08, mat.door,  0, 1.10, DOOR_Z - 0.05);     // painted slab
-box(1.16, 0.26, 0.03, mat.steel, 0, 0.16, DOOR_Z - 0.10);     // kick plate
-box(0.54, 0.34, 0.02, mat.dark,  0, 1.86, DOOR_Z - 0.10);     // wired glass light
-strip(0.50, 0.30, 0.01, glowM, 0, 1.86, DOOR_Z - 0.115);
-// horizontal push bar
-cyl(0.035, 0.035, 1.02, mat.steel, 0, 1.06, DOOR_Z - 0.13, 12).rotation.z = Math.PI / 2;
-[-0.44, 0.44].forEach(dx => cyl(0.028, 0.028, 0.10, mat.steel, dx, 1.06, DOOR_Z - 0.09, 8)
+const DOOR = new THREE.Group();                               // grouped so it can be clicked
+scene.add(DOOR);
+box(1.44, 2.36, 0.10, mat.steel, 0, 1.18, DOOR_Z, DOOR);      // steel frame
+box(1.20, 2.20, 0.08, mat.door,  0, 1.10, DOOR_Z - 0.05, DOOR); // painted slab
+box(1.16, 0.26, 0.03, mat.steel, 0, 0.16, DOOR_Z - 0.10, DOOR); // kick plate
+box(0.54, 0.34, 0.02, mat.dark,  0, 1.86, DOOR_Z - 0.10, DOOR); // wired glass light
+strip(0.50, 0.30, 0.01, glowM, 0, 1.86, DOOR_Z - 0.115, DOOR);
+cyl(0.035, 0.035, 1.02, mat.steel, 0, 1.06, DOOR_Z - 0.13, 12, DOOR).rotation.z = Math.PI / 2;
+[-0.44, 0.44].forEach(dx => cyl(0.028, 0.028, 0.10, mat.steel, dx, 1.06, DOOR_Z - 0.09, 8, DOOR)
   .rotation.x = Math.PI / 2);
 
 // EXIT box over the frame
@@ -1173,7 +1204,6 @@ function pendant(x, z, intensity, shadow, color) {
   scene.add(g);
 }
 // nothing hangs over the bar any more - it is lit from concealed sources
-pendant(3.2, 2.2, 0.7, false, 0x8fa6c4);
 
 // two concealed washes down the length of the counter
 [-2.8, 2.8].forEach(dx => {
@@ -1183,6 +1213,11 @@ pendant(3.2, 2.2, 0.7, false, 0x8fa6c4);
 });
 
 // warm backlight behind the bottles, the one warm note left in the room
+// the right-hand round table lost its pendant, so light it with no fixture
+const tableGlow = new THREE.PointLight(0xffc48a, 1.1, 4.0, 2);
+tableGlow.position.set(3.6, 2.15, 1.8);
+scene.add(tableGlow);
+
 const backGlow = new THREE.PointLight(0xffa347, 2.0, 7.5, 2);
 backGlow.position.set(barX, 1.9, BACK_Z + 0.5);
 scene.add(backGlow);
@@ -1392,7 +1427,9 @@ canvas.addEventListener('click', e => {
   if (!started) return enter();
   if (panelOpen || slip > 6) return;          // that was a look-around drag
   setNDC(e.clientX, e.clientY);
-  if (lookingAtJukebox()) openPanel();
+  const hitTarget = pickTarget();
+  if (hitTarget === 'jukebox') openPanel();
+  else if (hitTarget === 'door') openExit();
 });
 
 canvas.addEventListener('wheel', e => {
@@ -1451,7 +1488,9 @@ canvas.addEventListener('touchend', e => {
     if (t.identifier !== lookId) continue;
     if (slip < 10 && started && !panelOpen) {      // a tap, not a swipe
       setNDC(t.clientX, t.clientY);
-      if (lookingAtJukebox()) openPanel();
+      const tapped = pickTarget();
+      if (tapped === 'jukebox') openPanel();
+      else if (tapped === 'door') openExit();
     }
     lookId = null;
   }
@@ -1462,7 +1501,7 @@ addEventListener('keydown', e => {
   if (e.repeat) return;
   if (e.code === 'KeyR') rainLive = !rainLive;
   if (e.code === 'KeyJ') panelOpen ? closePanel() : openPanel();
-  if (e.code === 'Escape' && panelOpen) closePanel();
+  if (e.code === 'Escape' && panelOpen) { closePanel(); closeExit(); }
 });
 
 /* ----------------------------------------------------------------------
@@ -1483,14 +1522,15 @@ const HOLO_VERT = `
 const HOLO_FRAG = `
   uniform sampler2D uMap;
   uniform vec3 uKey, uTint;
-  uniform float uTol, uSoft, uTime, uOpacity, uFlicker, uFade, uSolid;
+  uniform float uTol, uSoft, uTime, uOpacity, uFlicker, uFade, uSolid, uAlphaOnly;
   uniform vec2 uParallax;
   varying vec2 vUv;
 
   float keyed(vec2 uv) {
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return 0.0;
     vec4 t = texture2D(uMap, uv);
-    // a PNG's own alpha wins; a JPG has none, so the colour key does the work
+    // once the background has been flood-filled away, alpha is the whole story
+    if (uAlphaOnly > 0.5) return smoothstep(0.25, 0.62, t.a);
     return t.a * smoothstep(uTol, uTol + uSoft, distance(t.rgb, uKey));
   }
   float hash(float n) { return fract(sin(n) * 43758.5453); }
@@ -1548,6 +1588,7 @@ function createHologram(opt) {
     uFlicker:  { value: 1 },
     uFade:     { value: opt.fade === undefined ? 0.10 : opt.fade },
     uSolid:    { value: opt.solid ? 1 : 0 },
+    uAlphaOnly:{ value: 0 },
     uParallax: { value: new THREE.Vector2() },
     uTint:     { value: new THREE.Vector3().fromArray(TINT) }
   };
@@ -1605,6 +1646,56 @@ function createHologram(opt) {
       aura.position.y = BASE + HEIGHT / 2;
     }
   }
+  // A colour key can only ask "is this pixel near the backdrop colour", so any
+  // dark clothing reads as backdrop and goes half-transparent. Flood filling
+  // inward from the border only removes background actually connected to the
+  // edge, so the inside of the figure stays fully opaque whatever its colours.
+  function floodCutout(img) {
+    const MAX = 900;                                   // cap the work on big photos
+    const sc = Math.min(1, MAX / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width * sc)), h = Math.max(1, Math.round(img.height * sc));
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const x = c.getContext('2d');
+    x.drawImage(img, 0, 0, w, h);
+    const id = x.getImageData(0, 0, w, h), px = id.data;
+
+    let sr = 0, sg = 0, sb = 0, n = 0;
+    const seed = i => { sr += px[i * 4]; sg += px[i * 4 + 1]; sb += px[i * 4 + 2]; n++; };
+    for (let i = 0; i < w; i++) { seed(i); seed((h - 1) * w + i); }
+    for (let j = 0; j < h; j++) { seed(j * w); seed(j * w + w - 1); }
+    sr /= n; sg /= n; sb /= n;
+
+    const tol = (opt.keyTol === undefined ? 0.30 : opt.keyTol) * 255 * 1.732;
+    const seen = new Uint8Array(w * h);
+    const stack = [];
+    for (let i = 0; i < w; i++) { stack.push(i, (h - 1) * w + i); }
+    for (let j = 0; j < h; j++) { stack.push(j * w, j * w + w - 1); }
+    while (stack.length) {
+      const k = stack.pop();
+      if (seen[k]) continue;
+      seen[k] = 1;
+      const o = k * 4;
+      const dr = px[o] - sr, dg = px[o + 1] - sg, db = px[o + 2] - sb;
+      if (Math.sqrt(dr * dr + dg * dg + db * db) > tol) continue;
+      px[o + 3] = 0;
+      const cx = k % w, cy = (k - cx) / w;
+      if (cx > 0) stack.push(k - 1);
+      if (cx < w - 1) stack.push(k + 1);
+      if (cy > 0) stack.push(k - w);
+      if (cy < h - 1) stack.push(k + w);
+    }
+    // one pass of alpha blur so the silhouette isn't a jagged stair-step
+    const a0 = new Uint8ClampedArray(w * h);
+    for (let i = 0; i < w * h; i++) a0[i] = px[i * 4 + 3];
+    for (let y = 1; y < h - 1; y++) for (let xx = 1; xx < w - 1; xx++) {
+      const k = y * w + xx;
+      px[k * 4 + 3] = (a0[k] * 4 + a0[k - 1] + a0[k + 1] + a0[k - w] + a0[k + w]) / 8;
+    }
+    x.putImageData(id, 0, 0);
+    return c;
+  }
+
   function autoKey(img) {
     if (opt.keyColor) return new THREE.Vector3().fromArray(opt.keyColor);
     const n = 64, c = document.createElement('canvas');
@@ -1618,8 +1709,20 @@ function createHologram(opt) {
     return new THREE.Vector3(r / k / 255, gg / k / 255, b / k / 255);
   }
   function apply(img, tex) {
+    let map = tex, alphaOnly = 0;
+    try {
+      const cut = floodCutout(img);                    // needs a same-origin image
+      map = new THREE.CanvasTexture(cut);
+      alphaOnly = 1;
+    } catch (e) {
+      map = tex;                                       // fall back to the colour key
+    }
     const key = autoKey(img);
-    mats.forEach(m => { m.uniforms.uMap.value = tex; m.uniforms.uKey.value.copy(key); });
+    mats.forEach(m => {
+      m.uniforms.uMap.value = map;
+      m.uniforms.uKey.value.copy(key);
+      m.uniforms.uAlphaOnly.value = alphaOnly;
+    });
     fit(img);
   }
 
@@ -1813,7 +1916,8 @@ const SRV = {
   // profile spun around the vertical axis: hip -> pinched waist -> bust -> shoulder
   torso: new THREE.LatheGeometry([
     [0.152, 0.000], [0.172, 0.070], [0.110, 0.150], [0.076, 0.215],
-    [0.114, 0.272], [0.150, 0.322], [0.128, 0.400], [0.100, 0.478], [0.074, 0.550]
+    [0.126, 0.278], [0.170, 0.325], [0.150, 0.368], [0.094, 0.430],
+    [0.074, 0.492], [0.048, 0.550]
   ].map(([r, y]) => new THREE.Vector2(r, y)), 16),
   skirt: new THREE.LatheGeometry([
     [0.168, 0.00], [0.190, -0.10], [0.214, -0.20], [0.220, -0.24]
@@ -2120,6 +2224,10 @@ fetch(PLAYLIST_URL, { cache: 'no-cache' })
       };
     }).filter(t => t.url);
     AUTOPLAY = data.autoplay !== false;
+    if (data.exit) {
+      EXIT_URL = data.exit.url || null;
+      if (data.exit.label) EXIT_LABEL = data.exit.label;
+    }
     PLAYER.addRemote(list, AUTOPLAY);
     const src = document.getElementById('jb-src');
     if (!list.length) PLAYER.setStatus('playlist.json lists no tracks');
@@ -2151,17 +2259,85 @@ function closePanel() {
   jb.style.display = 'none';
 }
 
+// the panel can be dragged out of the way by its header
+(() => {
+  const head = document.querySelector('#jb .jb-head');
+  let offX = 0, offY = 0, moving = false;
+  function start(cx, cy) {
+    const r = jb.getBoundingClientRect();
+    jb.style.left = r.left + 'px';
+    jb.style.top = r.top + 'px';
+    jb.style.right = 'auto';
+    jb.style.transform = 'none';          // drop the centring so left/top take over
+    offX = cx - r.left; offY = cy - r.top;
+    moving = true;
+  }
+  function move(cx, cy) {
+    if (!moving) return;
+    const w = jb.offsetWidth, h = jb.offsetHeight;
+    jb.style.left = Math.max(4, Math.min(innerWidth - w - 4, cx - offX)) + 'px';
+    jb.style.top  = Math.max(4, Math.min(innerHeight - h - 4, cy - offY)) + 'px';
+  }
+  head.addEventListener('mousedown', e => {
+    if (e.target.tagName === 'BUTTON') return;
+    start(e.clientX, e.clientY); e.preventDefault();
+  });
+  addEventListener('mousemove', e => move(e.clientX, e.clientY));
+  addEventListener('mouseup', () => { moving = false; });
+  head.addEventListener('touchstart', e => {
+    if (e.target.tagName === 'BUTTON') return;
+    const t = e.changedTouches[0]; start(t.clientX, t.clientY);
+  }, { passive: true });
+  addEventListener('touchmove', e => {
+    if (!moving) return;
+    const t = e.changedTouches[0]; move(t.clientX, t.clientY);
+  }, { passive: true });
+  ['touchend', 'touchcancel'].forEach(ev => addEventListener(ev, () => { moving = false; }));
+})();
+
 document.getElementById('jb-close').addEventListener('click', closePanel);
 document.getElementById('jb-prev').addEventListener('click', () => PLAYER.prev());
 document.getElementById('jb-next').addEventListener('click', () => PLAYER.next());
 document.getElementById('jb-play').addEventListener('click', () => PLAYER.toggle());
 document.getElementById('jb-vol').addEventListener('input', e => PLAYER.setVolume(+e.target.value));
 
-function lookingAtJukebox() {
+// what, if anything, is under the cursor and close enough to interact with
+function pickTarget() {
   raycaster.setFromCamera(mouseNDC, camera);
-  const hit = raycaster.intersectObject(JUKEBOX.group, true)[0];
-  return !!hit && hit.distance < 5.0;
+  const hit = raycaster.intersectObjects([JUKEBOX.group, DOOR], true)[0];
+  if (!hit || hit.distance > 5.0) return null;
+  for (let o = hit.object; o; o = o.parent) {
+    if (o === JUKEBOX.group) return 'jukebox';
+    if (o === DOOR) return 'door';
+  }
+  return null;
 }
+
+let EXIT_URL = null, EXIT_LABEL = 'Leave The Pub?';
+const exitBox = document.getElementById('exit');
+function openExit() {
+  if (panelOpen) return;
+  panelOpen = true;
+  exitBox.style.display = 'block';
+  prompt.style.display = 'none';
+  dragging = false;
+  document.querySelector('#exit .exit-q').textContent = EXIT_LABEL;
+  const go = document.getElementById('exit-go');
+  const sub = document.getElementById('exit-sub');
+  if (EXIT_URL) {
+    go.removeAttribute('disabled');
+    try { sub.textContent = new URL(EXIT_URL, location.href).hostname; }
+    catch (e) { sub.textContent = ''; }
+  } else {
+    go.setAttribute('disabled', 'disabled');
+    sub.textContent = 'no exit set in playlist.json';
+  }
+}
+function closeExit() { panelOpen = false; exitBox.style.display = 'none'; }
+document.getElementById('exit-stay').addEventListener('click', closeExit);
+document.getElementById('exit-go').addEventListener('click', () => {
+  if (EXIT_URL) location.href = EXIT_URL;
+});
 
 // ---------------------------------------------------------------- loop
 const velocity = new THREE.Vector3();
@@ -2209,10 +2385,11 @@ function animate() {
   hoverTick += dt;
   if (started && !panelOpen && !touch && hoverTick > 0.1) {
     hoverTick = 0;
-    const aim = !dragging && lookingAtJukebox();
+    const aim = dragging ? null : pickTarget();
     if (aim !== hovering) {
       hovering = aim;
       prompt.style.display = aim ? 'block' : 'none';
+      if (aim) prompt.textContent = aim === 'door' ? 'LEAVE THE PUB' : 'JUKEBOX \u2014 click';
     }
     if (aim) {
       prompt.style.left = (lastPX + 18) + 'px';

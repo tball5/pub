@@ -1,0 +1,16 @@
+{
+  "autoplay": true,
+  "baseUrl": "tracks/",
+  "exit": {
+    "label": "Leave The Pub?",
+    "url": "https://example.com/change-me"
+  },
+  "tracks": [
+    { "title": "Blue Ridge Line",   "artist": "The Wallbangers", "file": "blue-ridge-line.mp3" },
+    { "title": "Saturday Static",   "artist": "The Wallbangers", "file": "saturday-static.mp3" },
+    { "title": "Eight Ball Blues",  "artist": "Marcy Dial",      "file": "eight-ball-blues.mp3" },
+    { "title": "Marquee Lights",    "artist": "Marcy Dial",      "file": "marquee-lights.mp3" },
+    { "title": "Long Way Home",     "artist": "Coyle & Brand",   "file": "long-way-home.mp3" },
+    { "title": "Third and Long",    "artist": "Coyle & Brand",   "file": "third-and-long.mp3" }
+  ]
+}

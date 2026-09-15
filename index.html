@@ -1234,9 +1234,21 @@ const knob   = document.getElementById('knob');
 
 let yaw = 0;            // 0 looks down -Z, straight at the bar
 let pitch = 0;
-let yawT = 0, pitchT = 0;   // input writes here; the camera eases toward it
 const PITCH_MAX = 1.45;
-const clampPitch = () => { pitchT = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, pitchT)); };
+const clampPitch = () => { pitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, pitch)); };
+
+// Drag is keyed to the angle each pixel covers on screen, scaled by LOOK_GAIN.
+// At 1.0 whatever you grab stays exactly under the cursor; above that the view
+// runs ahead of your hand for a looser feel. 1.0-3.0 is the useful range.
+const LOOK_GAIN = 1.8;
+let radPerPxX = 0.0013, radPerPxY = 0.0013;
+function measureLook() {
+  const vFov = THREE.MathUtils.degToRad(camera.fov);
+  const hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
+  radPerPxX = hFov / Math.max(1, canvas.clientWidth)  * LOOK_GAIN;
+  radPerPxY = vFov / Math.max(1, canvas.clientHeight) * LOOK_GAIN;
+}
+measureLook();
 
 let started = false, rainLive = false, panelOpen = false;
 let dragging = false, lastX = 0, lastY = 0, downX = 0, downY = 0, slip = 0;
@@ -1272,9 +1284,9 @@ addEventListener('mousemove', e => {
   setNDC(e.clientX, e.clientY);
   lastPX = e.clientX; lastPY = e.clientY;
   if (!dragging) return;
-  yawT   += (e.clientX - lastX) * 0.005;
-  pitchT += (e.clientY - lastY) * 0.005;
-  slip   += Math.abs(e.clientX - lastX) + Math.abs(e.clientY - lastY);
+  yaw   += (e.clientX - lastX) * radPerPxX;
+  pitch += (e.clientY - lastY) * radPerPxY;
+  slip  += Math.abs(e.clientX - lastX) + Math.abs(e.clientY - lastY);
   lastX = e.clientX; lastY = e.clientY;
   clampPitch();
 });
@@ -1336,8 +1348,8 @@ canvas.addEventListener('touchstart', e => {
 canvas.addEventListener('touchmove', e => {
   for (const t of e.changedTouches) {
     if (t.identifier !== lookId) continue;
-    yawT   += (t.clientX - lastX) * 0.006;
-    pitchT += (t.clientY - lastY) * 0.006;
+    yaw   += (t.clientX - lastX) * radPerPxX * 1.25;
+    pitch += (t.clientY - lastY) * radPerPxY * 1.25;
     slip  += Math.abs(t.clientX - lastX) + Math.abs(t.clientY - lastY);
     lastX = t.clientX; lastY = t.clientY;
     clampPitch();
@@ -1559,7 +1571,7 @@ function createHologram(opt) {
 // finishes just under the video wall at 2.42
 const BARTENDER = createHologram({
   src: 'ejak.jpg',
-  height: 1.35, base: 1.05, pos: [-0.4, -4.55],
+  height: 1.35, base: 1.05, pos: [barX, -4.55],   // barX is -1.5, same as the sign
   pool: false,             // he is floating now, so no pool on the floor
   placeholder: 'stand'
 });
@@ -1569,7 +1581,7 @@ const BARTENDER = createHologram({
 const PATRON = createHologram({
   src: 'strider.jpg',
   height: 1.55,            // bottom of the image to the top of his head
-  base: 0.42,              // just under the bench cushion
+  base: 0.52,              // sitting on the cushion
   pos: [7.12, -5.66],
   facing: 0,               // fixed, looking straight out of the booth
   clamp: 0,                // never turns
@@ -1684,11 +1696,6 @@ function animate() {
     if (!dragging) setCursor(aim ? 'pointer' : 'grab');
   }
 
-  // ease the view toward whatever the drag asked for
-  const ease = 1 - Math.pow(0.0000001, dt);
-  yaw += (yawT - yaw) * ease;
-  pitch += (pitchT - pitch) * ease;
-
   // screens only need ~12fps, which keeps the canvas work off the critical path
   repaint += dt;
   if (repaint > 1 / 12) { feeds.forEach(f => paint(f, elapsed)); repaint = 0; }
@@ -1728,6 +1735,7 @@ addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
   updateFallScale();
+  measureLook();
 });
 </script>
 </body>

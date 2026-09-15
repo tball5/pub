@@ -152,12 +152,15 @@ const RAIN = (() => {
   const BG = "3,4,10";
   const pick = () => COLORS[Math.floor(Math.random() * COLORS.length)];
 
+  const DENSITY = 0.33;                       // fraction of columns that actually run
   const columns = Math.floor(W / fontSize);
   const drops = [];
+  const live = [];
   rctx.fillStyle = "rgb(" + BG + ")";
   rctx.fillRect(0, 0, W, H);
   for (let i = 0; i < columns; i++) {
     drops.push({ y: Math.random() * H / fontSize, color: pick(), speed: 0.35 + Math.random() * 0.5 });
+    live.push(Math.random() < DENSITY);
   }
 
   const tex = new THREE.CanvasTexture(rc);
@@ -166,6 +169,7 @@ const RAIN = (() => {
   function drawFrozen() {
     rctx.font = fontSize + "px monospace";
     for (let i = 0; i < columns; i++) {
+      if (!live[i]) continue;
       const x = i * fontSize;
       const start = Math.random() * H;
       const len = 10 + Math.floor(Math.random() * 30);
@@ -194,6 +198,7 @@ const RAIN = (() => {
     rctx.font = fontSize + "px monospace";
     rctx.shadowBlur = 6;
     for (let i = 0; i < columns; i++) {
+      if (!live[i]) continue;
       const d = drops[i];
       const ch = chars.charAt(Math.floor(Math.random() * chars.length));
       const x = i * fontSize;
@@ -248,14 +253,18 @@ function plankTexture() {
   return t;
 }
 
+// Phong instead of Standard: Blinn-Phong costs roughly a third of what the PBR
+// path does per light per pixel, and at this scale the look is near identical.
 const mat = {
-  floor:   new THREE.MeshStandardMaterial({ map: plankTexture(), color: 0xb08a63, roughness: .42, metalness: .12 }),
-  ceiling: new THREE.MeshStandardMaterial({ color: 0x140f0a, roughness: .95 }),
-  shell:   new THREE.MeshStandardMaterial({ color: 0x33200f, roughness: .62, metalness: .15 }),
-  deck:    new THREE.MeshStandardMaterial({ color: 0x5a3418, roughness: .3,  metalness: .12 }),
-  chrome:  new THREE.MeshStandardMaterial({ color: 0xc9973f, roughness: .26, metalness: .95 }),
-  seat:    new THREE.MeshStandardMaterial({ color: 0x6e2024, roughness: .52, metalness: .1 }),
-  dark:    new THREE.MeshStandardMaterial({ color: 0x1b1209, roughness: .66, metalness: .35 }),
+  floor:   new THREE.MeshPhongMaterial({ map: plankTexture(), color: 0xb08a63, specular: 0x2a2018, shininess: 26 }),
+  ceiling: new THREE.MeshPhongMaterial({ color: 0x140f0a, specular: 0x050505, shininess: 3 }),
+  shell:   new THREE.MeshPhongMaterial({ color: 0x33200f, specular: 0x1d1610, shininess: 12 }),
+  deck:    new THREE.MeshPhongMaterial({ color: 0x5a3418, specular: 0x3d332a, shininess: 55 }),
+  chrome:  new THREE.MeshPhongMaterial({ color: 0xc9973f, specular: 0xffe2a8, shininess: 120, reflectivity: 1 }),
+  seat:    new THREE.MeshPhongMaterial({ color: 0x6e2024, specular: 0x2e1a1c, shininess: 20 }),
+  dark:    new THREE.MeshPhongMaterial({ color: 0x1b1209, specular: 0x191512, shininess: 16 }),
+  door:    new THREE.MeshPhongMaterial({ color: 0x7c2622, specular: 0x4a3a34, shininess: 45 }),
+  steel:   new THREE.MeshPhongMaterial({ color: 0x8d949c, specular: 0xdfe6ee, shininess: 90 }),
 };
 const glow  = new THREE.MeshBasicMaterial({ color: RED });
 const glowV = new THREE.MeshBasicMaterial({ color: BLUE });
@@ -367,7 +376,7 @@ const bottles = new THREE.InstancedMesh(
 // stools
 for (let i = 0; i < 6; i++) {
   const x = barX - 4 + i * 1.6;
-  const z = BAR_Z + 1.3;
+  const z = BAR_Z + 1.12;          // pulled in so a seated arm reaches the bar top
   cyl(0.05, 0.06, 0.72, mat.dark, x, 0.36, z, 10);
   cyl(0.24, 0.24, 0.09, mat.seat, x, 0.76, z, 16);
   cyl(0.245, 0.245, 0.012, i % 2 ? glowM : glow, x, 0.705, z, 16);
@@ -381,7 +390,7 @@ const BEERS = [
   ['OAKMONT AMBER', '#9a5324'], ['CIDER HOUSE', '#c96a24'], ['GRAND FORKS WHEAT', '#c8a86a'],
   ['STEEL VALLEY DARK', '#3b2a44']
 ];
-const tapDark = new THREE.MeshStandardMaterial({ color: 0x14100c, roughness: .6, metalness: .3 });
+const tapDark = new THREE.MeshPhongMaterial({ color: 0x14100c, specular: 0x1a1a1a, shininess: 20 });
 
 const BADGES = BEERS.map(([name, color]) => {
   const c = document.createElement('canvas');
@@ -402,7 +411,7 @@ const BADGES = BEERS.map(([name, color]) => {
   const top = 112 - (words.length - 1) * 17;
   words.forEach((w, i) => x.fillText(w, 80, top + i * 34));
   const tex = new THREE.CanvasTexture(c);
-  return new THREE.MeshStandardMaterial({ map: tex, roughness: .45, metalness: .1 });
+  return new THREE.MeshPhongMaterial({ map: tex, specular: 0x333333, shininess: 30 });
 });
 
 // Every tap is the same five brass parts in the same arrangement, so they are
@@ -512,6 +521,7 @@ const BOOTH_POOL_MAT = (() => {
   });
 })();
 
+const BOOTH_GROUPS = [];
 function booth(x, z, ry, i, sides) {
   const g = new THREE.Group();
   const accent = i % 2 ? glowV : glow;
@@ -546,6 +556,8 @@ function booth(x, z, ry, i, sides) {
   g.position.set(x, 0, z);
   g.rotation.y = ry;   // local +z is the open side, so the booth always faces the room
   scene.add(g);
+  BOOTH_GROUPS[i] = g;
+  return g;
 }
 
 const BOOTHS = [];
@@ -852,17 +864,64 @@ const sign = new THREE.Mesh(
   new THREE.PlaneGeometry(3.0, 0.66),
   new THREE.MeshBasicMaterial({ map: signTexture('THE PUB') })
 );
-sign.position.set(barX, 0.68, BAR_FRONT + 0.01);
+sign.position.set(0, 3.05, D / 2 - 0.06);   // above the exit door
+sign.rotation.y = Math.PI;
 scene.add(sign);
 
-// door on the entrance wall
-box(1.2, 2.2, 0.12, mat.shell, 0, 1.1, D / 2 - 0.07);
-strip(1.28, 2.28, 0.02, glowV, 0, 1.1, D / 2 - 0.14);
-box(1.1, 2.1, 0.06, mat.dark, 0, 1.1, D / 2 - 0.11);
-cyl(0.05, 0.05, 0.12, mat.chrome, 0.45, 1.05, D / 2 - 0.2, 10).rotation.x = Math.PI / 2;
+// ---------------------------------------------------------------- the exit
+const DOOR_Z = D / 2 - 0.07;
+box(1.44, 2.36, 0.10, mat.steel, 0, 1.18, DOOR_Z);            // steel frame
+box(1.20, 2.20, 0.08, mat.door,  0, 1.10, DOOR_Z - 0.05);     // painted slab
+box(1.16, 0.26, 0.03, mat.steel, 0, 0.16, DOOR_Z - 0.10);     // kick plate
+box(0.54, 0.34, 0.02, mat.dark,  0, 1.86, DOOR_Z - 0.10);     // wired glass light
+strip(0.50, 0.30, 0.01, glowM, 0, 1.86, DOOR_Z - 0.115);
+// horizontal push bar
+cyl(0.035, 0.035, 1.02, mat.steel, 0, 1.06, DOOR_Z - 0.13, 12).rotation.z = Math.PI / 2;
+[-0.44, 0.44].forEach(dx => cyl(0.028, 0.028, 0.10, mat.steel, dx, 1.06, DOOR_Z - 0.09, 8)
+  .rotation.x = Math.PI / 2);
+
+// EXIT box over the frame
+const exitSign = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.58, 0.2),
+  new THREE.MeshBasicMaterial({ map: (() => {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 88;
+    const x = c.getContext('2d');
+    x.fillStyle = '#0a0a0a'; x.fillRect(0, 0, 256, 88);
+    x.shadowColor = '#35ff8a'; x.shadowBlur = 22;
+    x.fillStyle = '#c9ffe0';
+    x.font = '800 54px Arial, Helvetica, sans-serif';
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText('EXIT', 128, 48);
+    return new THREE.CanvasTexture(c);
+  })() })
+);
+exitSign.position.set(0, 2.47, D / 2 - 0.06);
+exitSign.rotation.y = Math.PI;
+scene.add(exitSign);
+
+// glowing beer emoji over the jukebox, no frame - just the sign itself
+const beerSign = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.95, 0.95),
+  new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, map: (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 448;
+    const x = c.getContext('2d');
+    // no background fill, so only the emoji and its glow show up
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.font = '260px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
+    [[52, '#ffb347'], [30, '#ffd98a'], [14, '#fff3d0']].forEach(([blur, col]) => {
+      x.shadowColor = col; x.shadowBlur = blur;
+      x.fillText('\ud83c\udf7b', 224, 232);
+    });
+    x.shadowBlur = 0;
+    return new THREE.CanvasTexture(c);
+  })() })
+);
+beerSign.position.set(-W / 2 + 0.07, 2.65, JUKE_Z);
+beerSign.rotation.y = Math.PI / 2;            // facing into the room
+scene.add(beerSign);
 
 // ---------------------------------------------------------------- screens
-const tvMat   = new THREE.MeshStandardMaterial({ color: 0x0b0b0f, roughness: .3, metalness: .65 });
+const tvMat   = new THREE.MeshPhongMaterial({ color: 0x0b0b0f, specular: 0x4a4a55, shininess: 70 });
 const glowMat = new THREE.MeshBasicMaterial({ color: 0x3f9dd8 });
 
 function makeFeed(kind) {
@@ -1445,7 +1504,7 @@ const HOLO_VERT = `
 const HOLO_FRAG = `
   uniform sampler2D uMap;
   uniform vec3 uKey, uTint;
-  uniform float uTol, uSoft, uTime, uOpacity, uFlicker, uFade;
+  uniform float uTol, uSoft, uTime, uOpacity, uFlicker, uFade, uSolid;
   uniform vec2 uParallax;
   varying vec2 vUv;
 
@@ -1468,6 +1527,9 @@ const HOLO_FRAG = `
     uv.x += glitch * (hash(band) - 0.5) * 0.018;
 
     float a = keyed(uv);
+    // A colour key leaves partial alpha wherever the subject's own tones sit near
+    // the backdrop. Hardening it snaps those areas opaque, keeping a thin edge.
+    if (uSolid > 0.5) a = smoothstep(0.28, 0.55, a);
     if (a < 0.02) discard;
 
     // the photo's own colour, lifted slightly so it reads in a dark room
@@ -1506,6 +1568,7 @@ function createHologram(opt) {
     uOpacity:  { value: opt.opacity === undefined ? 0.94 : opt.opacity },
     uFlicker:  { value: 1 },
     uFade:     { value: opt.fade === undefined ? 0.10 : opt.fade },
+    uSolid:    { value: opt.solid ? 1 : 0 },
     uParallax: { value: new THREE.Vector2() },
     uTint:     { value: new THREE.Vector3().fromArray(TINT) }
   };
@@ -1649,11 +1712,382 @@ const PATRON = createHologram({
   clamp: 0,                // never turns
   parallax: 0.045,
   opacity: 1.0,            // fully solid, not a see-through projection
+  solid: true,             // snap the keyed alpha so the wall can't show through
   fade: 0,                 // no dissolve across his lap
   aura: false,             // the additive halo was washing him out
   pool: false, lamp: false,
   placeholder: 'sit'
 });
+
+/* =====================================================================
+   HOLO REGULARS
+   Simple hologram people: a few walk the room, a few sit at the bar and in
+   the booths, a few dance on the open floor.
+   ===================================================================== */
+function holoMaterial(color, intensity) {
+  const m = new THREE.ShaderMaterial({
+    uniforms: {
+      uColor:     { value: new THREE.Color(color) },
+      uIntensity: { value: intensity },
+      uTime:      { value: 0 }
+    },
+    vertexShader: `
+      varying vec3 vN; varying vec3 vView; varying float vY;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vN = normalize(normalMatrix * normal);
+        vView = normalize(-mv.xyz);
+        vY = (modelMatrix * vec4(position, 1.0)).y;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform vec3 uColor; uniform float uIntensity; uniform float uTime;
+      varying vec3 vN; varying vec3 vView; varying float vY;
+      void main() {
+        // edges glow, the middle stays thin, so the volume reads without mass
+        float fres = 1.0 - abs(dot(normalize(vN), normalize(vView)));
+        float body = 0.16 + pow(fres, 2.0) * 1.4;
+        float scan = 0.84 + 0.16 * sin(vY * 90.0 - uTime * 2.5);
+        gl_FragColor = vec4(uColor * body * scan * uIntensity, 1.0);
+      }`,
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending
+  });
+  m.userData.base = intensity;
+  return m;
+}
+
+const avatars = [];
+const AV_COLORS = ["#5fe9ff", "#8ff7ff", "#b98cff", "#ff6ed2", "#3dffaa"];
+const avMats = [];
+const avMatByColor = {};
+const AV = {
+  leg:   new THREE.CylinderGeometry(0.07, 0.055, 0.9, 8).translate(0, -0.45, 0),
+  thigh: new THREE.CylinderGeometry(0.075, 0.065, 0.46, 8).translate(0, -0.23, 0),
+  shin:  new THREE.CylinderGeometry(0.06, 0.05, 0.46, 8).translate(0, -0.23, 0),
+  torso: new THREE.CylinderGeometry(0.2, 0.14, 0.62, 10),
+  arm:   new THREE.CylinderGeometry(0.05, 0.04, 0.64, 6).translate(0, -0.32, 0),
+  head:  new THREE.SphereGeometry(0.12, 12, 10),
+  glass: new THREE.CylinderGeometry(0.046, 0.034, 0.14, 10).translate(0, 0.07, 0),
+  foam:  new THREE.CylinderGeometry(0.048, 0.048, 0.032, 10).translate(0, 0.155, 0)
+};
+const BEER_MAT = holoMaterial('#ffb347', 0.9);
+const FOAM_MAT = holoMaterial('#fff4dc', 0.85);
+avMats.push(BEER_MAT, FOAM_MAT);
+
+function makeAvatar(color, opt) {
+  opt = opt || {};
+  const hip = opt.hip === undefined ? 0.92 : opt.hip;
+  let mat = avMatByColor[color];
+  if (!mat) { mat = avMatByColor[color] = holoMaterial(color, 0.55); avMats.push(mat); }
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  root.add(body);
+  const part = (geo, x, y, parent) => {
+    const m = new THREE.Mesh(geo, mat); m.position.set(x, y, 0); parent.add(m); return m;
+  };
+  const pivot = (x, y) => { const g = new THREE.Group(); g.position.set(x, y, 0); body.add(g); return g; };
+
+  const legL = pivot(-0.11, hip), legR = pivot(0.11, hip);
+  if (opt.seated) {
+    // thigh forward from the hip, shin folded back down to the floor
+    [legL, legR].forEach(t => {
+      t.rotation.x = -Math.PI / 2;
+      part(AV.thigh, 0, 0, t);
+      const knee = new THREE.Group();
+      knee.position.set(0, -0.46, 0);
+      knee.rotation.x = Math.PI / 2;
+      part(AV.shin, 0, 0, knee);
+      t.add(knee);
+    });
+  } else {
+    part(AV.leg, 0, 0, legL); part(AV.leg, 0, 0, legR);
+  }
+  part(AV.torso, 0, hip + 0.34, body);
+  const armL = pivot(-0.26, hip + 0.60), armR = pivot(0.26, hip + 0.60);
+  part(AV.arm, 0, 0, armL); part(AV.arm, 0, 0, armR);
+
+  // the arm runs 0.64 from the shoulder pivot, so the hand sits at its end
+  const hand = new THREE.Group();
+  hand.position.set(0, -0.62, 0.03);
+  hand.add(new THREE.Mesh(AV.glass, BEER_MAT));
+  hand.add(new THREE.Mesh(AV.foam, FOAM_MAT));
+  armR.add(hand);
+
+  const head = part(AV.head, 0, hip + 0.81, body);
+  const sc = opt.scale || (opt.seated ? 1 : 0.94 + Math.random() * 0.12);
+  root.scale.setScalar(sc);
+  (opt.parent || scene).add(root);
+  return { root, body, legL, legR, armL, armR, head, hand,
+           phase: Math.random() * 10, hip, restR: -0.62, restL: -0.55 };
+}
+
+/* ----------------------------------------------------------------------
+   THE SERVER
+   Built differently from the regulars: her torso is a lathed profile rather
+   than stacked cylinders, so hip, waist and shoulder actually curve. Silver
+   with a black dress and hair. She works the room, stopping at every booth
+   that has someone in it to see whether they need anything.
+   ---------------------------------------------------------------------- */
+const SRV_HIP = 0.86;                       // shorter than the regulars' 0.92
+const SRV = {
+  // profile spun around the vertical axis: hip -> pinched waist -> bust -> shoulder
+  torso: new THREE.LatheGeometry([
+    [0.152, 0.000], [0.170, 0.070], [0.130, 0.150], [0.094, 0.215],
+    [0.126, 0.272], [0.148, 0.322], [0.128, 0.400], [0.100, 0.478], [0.074, 0.550]
+  ].map(([r, y]) => new THREE.Vector2(r, y)), 16),
+  skirt: new THREE.LatheGeometry([
+    [0.168, 0.00], [0.190, -0.10], [0.214, -0.20], [0.220, -0.24]
+  ].map(([r, y]) => new THREE.Vector2(r, y)), 16),
+  seat:  new THREE.SphereGeometry(0.115, 12, 10),
+  thigh: new THREE.CylinderGeometry(0.050, 0.040, 0.44, 8).translate(0, -0.22, 0),
+  shin:  new THREE.CylinderGeometry(0.040, 0.030, 0.42, 8).translate(0, -0.21, 0),
+  arm:   new THREE.CylinderGeometry(0.031, 0.025, 0.54, 6).translate(0, -0.27, 0),
+  head:  new THREE.SphereGeometry(0.100, 14, 12),
+  hair:  new THREE.SphereGeometry(0.121, 14, 12, 0, Math.PI * 2, 0, Math.PI * 0.66),
+  tail:  new THREE.CylinderGeometry(0.050, 0.019, 0.32, 8).translate(0, -0.16, 0)
+};
+const SRV_SILVER = holoMaterial('#e3ebf4', 0.52);
+const SRV_BLACK  = holoMaterial('#6d7889', 0.30);   // reads as black against the silver
+avMats.push(SRV_SILVER, SRV_BLACK);
+
+// A stand-and-face position in front of a booth: 1.4m out from its centre,
+// along the open side, looking back at the table.
+function boothStop(i) {
+  const [bx, bz, ry] = BOOTHS[i];
+  return { x: bx + Math.sin(ry) * 1.4, z: bz + Math.cos(ry) * 1.4, face: ry + Math.PI };
+}
+
+function makeServer(servedBooths) {
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  root.add(body);
+  const mesh = (geo, mat, y, parent) => {
+    const m = new THREE.Mesh(geo, mat); m.position.y = y || 0; (parent || body).add(m); return m;
+  };
+  const pivot = (x, y) => { const g = new THREE.Group(); g.position.set(x, y, 0); body.add(g); return g; };
+
+  const hipL = pivot(-0.082, SRV_HIP), hipR = pivot(0.082, SRV_HIP);
+  mesh(SRV.thigh, SRV_SILVER, 0, hipL); mesh(SRV.thigh, SRV_SILVER, 0, hipR);
+  const kneeL = new THREE.Group(), kneeR = new THREE.Group();
+  kneeL.position.y = -0.44; kneeR.position.y = -0.44;
+  hipL.add(kneeL); hipR.add(kneeR);
+  mesh(SRV.shin, SRV_SILVER, 0, kneeL); mesh(SRV.shin, SRV_SILVER, 0, kneeR);
+
+  mesh(SRV.torso, SRV_SILVER, SRV_HIP);
+  // a lathe is round, so a little sphere adds the shape a turned profile can't
+  const seat = mesh(SRV.seat, SRV_BLACK, SRV_HIP + 0.03);
+  seat.position.z = -0.055;
+  seat.scale.set(1.18, 0.74, 0.92);
+  mesh(SRV.skirt, SRV_BLACK, SRV_HIP + 0.02);
+
+  const armL = pivot(-0.158, SRV_HIP + 0.482), armR = pivot(0.158, SRV_HIP + 0.482);
+  mesh(SRV.arm, SRV_SILVER, 0, armL); mesh(SRV.arm, SRV_SILVER, 0, armR);
+
+  const head = mesh(SRV.head, SRV_SILVER, SRV_HIP + 0.675);
+  mesh(SRV.hair, SRV_BLACK, SRV_HIP + 0.686);
+  const tail = new THREE.Group();
+  tail.position.set(0, SRV_HIP + 0.72, -0.088);
+  tail.rotation.x = 0.35;
+  mesh(SRV.tail, SRV_BLACK, 0, tail);
+  body.add(tail);
+
+  // ---- her round: behind the bar, then every occupied booth in turn ----
+  const walls = { right: [], entry: [], left: [] };
+  servedBooths.forEach(i => {
+    const ry = BOOTHS[i][2];
+    if (Math.abs(ry + Math.PI / 2) < 0.1) walls.right.push(i);
+    else if (Math.abs(ry - Math.PI) < 0.1) walls.entry.push(i);
+    else walls.left.push(i);
+  });
+  walls.right.sort((a, b) => BOOTHS[a][1] - BOOTHS[b][1]);          // up the right side
+  walls.entry.sort((a, b) => BOOTHS[b][0] - BOOTHS[a][0]);          // right to left
+  walls.left.sort((a, b) => BOOTHS[b][1] - BOOTHS[a][1]);           // back down the left
+
+  const wps = [];
+  const go = (x, z, face) => wps.push({ x, z, face: face === undefined ? null : face });
+  go(-5.8, -4.35); go(2.9, -4.35); go(4.4, -3.60); go(4.6, -1.60);   // behind the bar and round
+  walls.right.forEach(i => { const st = boothStop(i); go(st.x, st.z, st.face); });
+  walls.entry.forEach(i => { const st = boothStop(i); go(st.x, st.z, st.face); });
+  if (walls.left.length) go(-2.0, 3.70);                             // across the top
+  walls.left.forEach(i => { const st = boothStop(i); go(st.x, st.z, st.face); });
+  go(-6.1, -1.00); go(-6.9, -3.70);                                  // back behind the bar
+
+  const segs = []; let total = 0;
+  for (let k = 0; k < wps.length; k++) {
+    const a = wps[k], b = wps[(k + 1) % wps.length];
+    const len = Math.hypot(b.x - a.x, b.z - a.z);
+    segs.push({ a, b, len, start: total, idx: k });
+    total += len;
+  }
+  scene.add(root);
+  return { mode: 'serve', root, body, hipL, hipR, kneeL, kneeR, armL, armR, head, tail, seat,
+           wps, segs, total, dist: 0, speed: 0.8, phase: 0, pause: 0, faceTo: null };
+}
+
+function updateServer(av, dt, t) {
+  if (av.pause > 0) {
+    // standing at the table, checking whether anyone needs anything
+    av.pause -= dt;
+    const k = Math.min(1, Math.max(0, 1 - Math.abs(av.pause - 1.5) / 1.1));
+    av.hipL.rotation.x = av.hipR.rotation.x = 0;
+    av.kneeL.rotation.x = av.kneeR.rotation.x = 0;
+    av.armR.rotation.x = -0.25 - k * 0.55;            // open hand, asking
+    av.armR.rotation.z = -0.18 - k * 0.42 + Math.sin(t * 3.4) * 0.05 * k;
+    av.armL.rotation.x = -0.12;
+    av.armL.rotation.z = 0.14;
+    av.body.rotation.x = k * 0.09;                    // leans in a little
+    av.body.rotation.z = Math.sin(t * 1.4) * 0.03;
+    av.body.position.x = 0;
+    av.body.position.y = 0;
+    av.tail.rotation.z = Math.sin(t * 1.6) * 0.06;
+    if (av.faceTo !== null) {
+      let d = av.faceTo - av.root.rotation.y;
+      d = Math.atan2(Math.sin(d), Math.cos(d));
+      av.root.rotation.y += d * Math.min(1, dt * 4);
+    }
+  } else {
+    const prev = av.dist;
+    av.dist = (av.dist + dt * av.speed) % av.total;
+
+    let seg = av.segs[0];
+    for (const sg of av.segs) if (av.dist >= sg.start) seg = sg;
+    const k = (av.dist - seg.start) / seg.len;
+    av.root.position.set(seg.a.x + (seg.b.x - seg.a.x) * k, 0,
+                         seg.a.z + (seg.b.z - seg.a.z) * k);
+
+    const target = Math.atan2(seg.b.x - seg.a.x, seg.b.z - seg.a.z);
+    let d = target - av.root.rotation.y;
+    d = Math.atan2(Math.sin(d), Math.cos(d));
+    av.root.rotation.y += d * Math.min(1, dt * 5);
+
+    av.phase += dt * av.speed * 5.4;
+    const sw = Math.sin(av.phase);
+    av.hipL.rotation.x = sw * 0.46;  av.hipR.rotation.x = -sw * 0.46;
+    // positive knee rotation folds the shin backwards, which is the way a knee goes
+    av.kneeL.rotation.x = Math.max(0, sw) * 0.8;
+    av.kneeR.rotation.x = Math.max(0, -sw) * 0.8;
+    av.armL.rotation.x = sw * 0.34;   av.armL.rotation.z = 0.1;
+    av.armR.rotation.x = -sw * 0.34;  av.armR.rotation.z = -0.1;
+    av.body.position.y = Math.abs(Math.cos(av.phase)) * 0.026;
+    av.body.position.x = sw * 0.02;
+    av.body.rotation.z = -sw * 0.05;
+    av.body.rotation.x = 0;
+    av.tail.rotation.z = -sw * 0.18;
+    av.tail.rotation.x = 0.35 + Math.abs(sw) * 0.12;
+
+    // arriving at a waypoint that is a table means stopping there
+    const reached = av.segs.find(sg => sg.start > prev && sg.start <= av.dist);
+    if (reached && av.wps[reached.idx].face !== null) {
+      av.pause = 3.2;
+      av.faceTo = av.wps[reached.idx].face;
+    }
+  }
+  av.head.position.y = SRV_HIP + 0.675 + Math.sin(t * 2.1) * 0.007;
+}
+
+function buildAvatars() {
+  const STOOL_Z = BAR_Z + 1.12;              // matches the stools above
+  // stool xs run barX - 4 + i * 1.6, so these land on real stools
+  const stools = [
+    { x: barX - 2.4, c: '#ff6ed2' },         // -3.9  pink
+    { x: barX + 2.4, c: '#b98cff' },         //  0.9  purple, one stool right of the sign
+    { x: barX + 4.0, c: '#5fe9ff' }          //  2.5  blue, sitting next to the purple
+  ];
+  // Booth order is: 0,1 left wall | 2,3,4 right wall | 5 corner | 6,7 entry wall.
+  // The corner is the one-sided booth, so find it rather than trusting an index.
+  const CORNER_BOOTH = BOOTHS.findIndex(b => b[3]);
+  // [booth index, bench side, colour]
+  const seats = [
+    [3, -1, '#5fe9ff'], [3,  1, '#8ff7ff'],  // right wall, facing pair
+    [0, -1, '#ff6ed2'], [0,  1, '#8ff7ff'],  // left booth: one pink, one blue
+    [1, -1, '#3dffaa'],                      // a scattering in the other booths
+    [4,  1, '#5fe9ff']
+  ];
+  // four smaller ones packed into the booth by the door, two to a bench,
+  // greens and blues crossed corner to corner
+  const KID = 0.78;
+  const kids = [
+    [7, -1, -0.34, '#3dffaa'], [7, -1,  0.26, '#5fe9ff'],
+    [7,  1, -0.34, '#5fe9ff'], [7,  1,  0.26, '#3dffaa']
+  ];
+  const served = [];                         // booths that end up with someone in them
+  const nStool = touch ? 2 : stools.length;
+  const nSeat  = touch ? 3 : seats.length;
+
+  for (let i = 0; i < nStool; i++) {
+    const av = makeAvatar(stools[i].c, { seated: true, hip: 0.86 });
+    av.mode = 'sit';
+    av.root.position.set(stools[i].x, 0, STOOL_Z);
+    av.root.rotation.y = Math.PI;            // facing the counter
+    av.restR = -1.22;                        // forearm out onto the bar top
+    av.restL = -1.18;
+    avatars.push(av);
+  }
+
+  for (let i = 0; i < nSeat; i++) {
+    const [bi, side, c] = seats[i];
+    const g = BOOTH_GROUPS[bi];
+    if (!g || bi === CORNER_BOOTH) continue;   // never seat anyone with Strider
+    if (served.indexOf(bi) < 0) served.push(bi);
+    const av = makeAvatar(c, { seated: true, hip: 0.60, parent: g });
+    av.mode = 'sit';
+    av.root.position.set(side * 0.66, 0, -0.05);
+    av.root.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;   // facing each other
+    av.restR = -0.83;                        // glass down on the booth table
+    av.restL = -0.78;
+    avatars.push(av);
+  }
+
+  for (let i = 0; i < (touch ? 2 : kids.length); i++) {
+    const [bi, side, along, c] = kids[i];
+    const g = BOOTH_GROUPS[bi];
+    if (!g || bi === CORNER_BOOTH) continue;
+    if (served.indexOf(bi) < 0) served.push(bi);
+    const av = makeAvatar(c, { seated: true, hip: 0.60, parent: g, scale: KID });
+    av.mode = 'sit';
+    // scaling shrinks the hip too, so lift the root to put them back on the cushion
+    av.root.position.set(side * 0.66, 0.60 * (1 - KID), -0.05 + along);
+    av.root.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
+    av.restR = -0.92;                        // shorter arms, steeper reach
+    av.restL = -0.86;
+    avatars.push(av);
+  }
+  avatars.push(makeServer(served));
+  updateAvatars(0, 0);
+}
+
+function updateAvatars(dt, t) {
+  if (reduced && dt > 0) return;
+  if (!reduced) avMats.forEach((m, i) => {
+    m.uniforms.uTime.value = t;
+    m.uniforms.uIntensity.value =
+      m.userData.base * (0.93 + Math.sin(t * 27 + i * 2.1) * 0.05 + (Math.random() < 0.004 ? -0.4 : 0));
+  });
+
+  for (const av of avatars) {
+    if (av.mode === 'serve') { updateServer(av, dt, t); continue; }
+    const p = av.phase;
+
+    // one long sip every seven seconds or so, out of step with each other
+    const c = (t * 0.45 + p) % 7;
+    const sip = c < 1.4 ? Math.sin(c * Math.PI / 1.4) : 0;
+
+    av.armR.rotation.x = av.restR - sip * 1.15;        // glass up to the mouth
+    av.armR.rotation.z = -0.12 - sip * 0.12;
+    av.armL.rotation.x = av.restL + Math.sin(t * 1.3 + p) * 0.09;
+    av.armL.rotation.z = 0.12;
+
+    // the pint stays upright however the arm swings
+    av.hand.rotation.x = -av.armR.rotation.x;
+    av.hand.rotation.z = -av.armR.rotation.z;
+
+    av.body.rotation.z = Math.sin(t * 0.8 + p) * 0.025;
+    av.body.rotation.y = Math.sin(t * 0.5 + p) * 0.12 * (1 - sip);   // turns to talk
+    av.head.position.y = av.hip + 0.81 + Math.sin(t * 1.7 + p) * 0.012 - sip * 0.02;
+  }
+}
+buildAvatars();
 
 /* ----------------------------------------------------------------------
    PLAYLIST MANIFEST
@@ -1760,6 +2194,7 @@ function animate() {
   JUKEBOX.update(elapsed, dt);
   BARTENDER.update(elapsed, dt);
   PATRON.update(elapsed, dt);
+  updateAvatars(dt, elapsed);
 
   // hover test a few times a second rather than every frame
   hoverTick += dt;

@@ -25,15 +25,20 @@
     position:fixed; left:16px; bottom:14px; color:#6b5c45; pointer-events:none;
     font:400 12px/1.4 ui-monospace, Menlo, Consolas, monospace; letter-spacing:.08em;
   }
-  #cross {
-    position:fixed; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px;
-    border-radius:50%; background:rgba(255,255,255,.55); display:none; pointer-events:none;
-  }
   #prompt {
-    position:fixed; left:50%; top:calc(50% + 26px); transform:translateX(-50%);
-    display:none; pointer-events:none; padding:6px 14px; border-radius:3px;
-    background:rgba(8,8,12,.8); border:1px solid #ff3b3b; color:#ffe6b0;
-    font:700 12px/1 Arial, Helvetica, sans-serif; letter-spacing:.14em;
+    position:fixed; display:none; pointer-events:none; padding:6px 14px; border-radius:3px;
+    background:rgba(8,8,12,.85); border:1px solid #ff3b3b; color:#ffe6b0;
+    font:700 12px/1 Arial, Helvetica, sans-serif; letter-spacing:.14em; z-index:15;
+  }
+  #stick {
+    position:fixed; left:24px; bottom:28px; width:132px; height:132px; display:none;
+    border-radius:50%; background:rgba(10,14,20,.42); border:2px solid rgba(255,255,255,.22);
+    touch-action:none; z-index:15;
+  }
+  #knob {
+    position:absolute; left:50%; top:50%; width:56px; height:56px; margin:-28px 0 0 -28px;
+    border-radius:50%; background:rgba(230,240,255,.5); border:2px solid rgba(255,255,255,.5);
+    box-shadow:0 0 18px rgba(120,190,255,.45);
   }
   #jb {
     position:fixed; right:22px; top:50%; transform:translateY(-50%); width:310px;
@@ -74,11 +79,11 @@
 <div id="hud"><div class="panel">
   <h1>THE PUB</h1>
   <p>every game &middot; every night</p>
-  <p class="keys">click to step inside<br>W A S D or scroll to walk &middot; mouse to look<br>arrow keys look &middot; R runs the rain<br>click the jukebox (or press J) for the music</p>
+  <p class="keys">click to step inside<br>drag to look &middot; scroll to walk<br>click the jukebox for the music &middot; R runs the rain</p>
 </div></div>
 <div id="hint">esc to release the mouse</div>
-<div id="cross"></div>
-<div id="prompt">JUKEBOX &mdash; click to open</div>
+<div id="prompt">JUKEBOX &mdash; click</div>
+<div id="stick"><div id="knob"></div></div>
 
 <div id="jb">
   <div class="jb-head"><span>JUKEBOX</span><button id="jb-close" title="close">&#10005;</button></div>
@@ -1216,130 +1221,137 @@ function resolve(pos) {
 }
 
 // ---------------------------------------------------------------- controls
+// Desktop: drag to look, scroll to walk, click to interact. The cursor is
+// never captured. Touch: left thumbstick walks, swiping anywhere looks.
 const canvas = renderer.domElement;
-canvas.tabIndex = 0;
-const hud  = document.getElementById('hud');
-const hint = document.getElementById('hint');
-
-const keys = {};
-const swallow = ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'];
-addEventListener('keydown', e => {
-  keys[e.code] = true;
-  if (swallow.includes(e.code)) e.preventDefault();
-  if (e.code === 'KeyR' && !e.repeat) rainLive = !rainLive;
-  if (e.code === 'KeyM' && !e.repeat && dragMode) {
-    mouseLook = !mouseLook;
-    hint.textContent = mouseLook
-      ? 'move the mouse to look \u00b7 M for drag-only'
-      : 'drag to look \u00b7 M for mouse steering';
-    canvas.style.cursor = mouseLook ? 'crosshair' : 'grab';
-  }
-});
-addEventListener('keyup',   e => { keys[e.code] = false; });
+const hud    = document.getElementById('hud');
+const hint   = document.getElementById('hint');
+const stick  = document.getElementById('stick');
+const knob   = document.getElementById('knob');
 
 let yaw = 0;            // 0 looks down -Z, straight at the bar
-let pitch = 0;          // clamped just short of straight up / straight down
+let pitch = 0;
 const PITCH_MAX = 1.45;
-let rainLive = false;   // wall rain starts frozen
-let mouseLook = true;   // steer by cursor position when pointer lock is unavailable
-let overCanvas = false;
-let started = false, dragMode = false, dragging = false, lastX = 0, lastY = 0;
-let lastDownX = 0, lastDownY = 0;
 const clampPitch = () => { pitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, pitch)); };
 
-const locked = () => document.pointerLockElement === canvas;
-
-function useDrag() {
-  if (dragMode) return;
-  dragMode = true;                       // this browser or frame won't release the cursor
-  hint.textContent = 'move the mouse to look \u00b7 M for drag-only';
-  canvas.style.cursor = 'crosshair';
-}
+let started = false, rainLive = false, panelOpen = false;
+let dragging = false, lastX = 0, lastY = 0, downX = 0, downY = 0, slip = 0;
+let lastPX = 0, lastPY = 0;         // cursor position, for the hover label
+const mouseNDC = new THREE.Vector2(0, 0);
+const move = { f: 0, s: 0 };        // forward / strafe, -1..1, from the thumbstick
+let scrollStep = 0;
 
 function enter() {
+  if (started) return;
   started = true;
+  hud.style.display = 'none';
   if (listener.context.state === 'suspended') listener.context.resume();
   if (AUTOPLAY && PLAYER.count() && PLAYER.isIdle()) PLAYER.toggle();
-  hud.style.display = 'none';
-  canvas.focus();
-  try { window.focus(); } catch (e) {}
-  let req;
-  try { req = canvas.requestPointerLock && canvas.requestPointerLock(); } catch (e) { useDrag(); }
-  if (req && typeof req.catch === 'function') req.catch(useDrag);
-  setTimeout(() => { if (!locked()) useDrag(); }, 400);
+  hint.textContent = touch ? 'thumbstick to walk, swipe to look'
+                           : 'drag to look, scroll to walk';
+  if (touch) stick.style.display = 'block';
 }
-
 hud.addEventListener('click', enter);
-canvas.addEventListener('click', e => {
-  if (!started) return enter();
-  if (panelOpen) return;
-  const slipped = Math.abs(e.clientX - lastDownX) + Math.abs(e.clientY - lastDownY);
-  if (!locked() && slipped > 6) return;       // that was a look-around drag, not a click
-  if (lookingAtJukebox()) return openPanel();
-  // lock may have been refused the first time; a later click can still win it
-  if (!locked() && canvas.requestPointerLock) canvas.requestPointerLock();
-});
-canvas.addEventListener('mouseenter', () => { overCanvas = true; });
-canvas.addEventListener('mouseleave', () => { overCanvas = false; });
-document.addEventListener('pointerlockerror', useDrag);
-document.addEventListener('pointerlockchange', () => {
-  if (locked()) {
-    dragMode = false;
-    hud.style.display = 'none';
-    hint.textContent = 'esc to release the mouse';
-    canvas.style.cursor = 'none';
-  } else if (started && !dragMode && !panelOpen && !reLock) {
-    started = false;
-    hud.style.display = 'flex';
-    canvas.style.cursor = 'default';
-    cross.style.display = 'none';
-    prompt.style.display = 'none';
-  } else if (panelOpen) {
-    canvas.style.cursor = 'default';
-  }
-});
 
-document.addEventListener('mousemove', e => {
-  if (locked()) {
-    yaw -= e.movementX * 0.0022;
-    pitch -= e.movementY * 0.0022;
-  } else if (dragging) {
-    yaw   += (e.clientX - lastX) * 0.005;
-    pitch += (e.clientY - lastY) * 0.005;
-    lastX = e.clientX; lastY = e.clientY;
-  }
-  clampPitch();
-});
+// ---- mouse -------------------------------------------------------------
+function setNDC(cx, cy) {
+  const r = canvas.getBoundingClientRect();
+  mouseNDC.set((cx - r.left) / r.width * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+}
 canvas.addEventListener('mousedown', e => {
-  if (locked()) return;
-  dragging = true; lastX = lastDownX = e.clientX; lastY = lastDownY = e.clientY;
+  dragging = true; slip = 0;
+  lastX = downX = e.clientX; lastY = downY = e.clientY;
   canvas.style.cursor = 'grabbing';
 });
-addEventListener('mouseup', () => { dragging = false; if (dragMode) canvas.style.cursor = 'grab'; });
-
-canvas.addEventListener('touchstart', e => {
-  if (!started) enter();
-  dragging = true; lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
-}, { passive: true });
-canvas.addEventListener('touchmove', e => {
+addEventListener('mousemove', e => {
+  setNDC(e.clientX, e.clientY);
+  lastPX = e.clientX; lastPY = e.clientY;
   if (!dragging) return;
-  yaw   += (e.touches[0].clientX - lastX) * 0.006;
-  pitch += (e.touches[0].clientY - lastY) * 0.006;
-  lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+  yaw   += (e.clientX - lastX) * 0.005;
+  pitch += (e.clientY - lastY) * 0.005;
+  slip  += Math.abs(e.clientX - lastX) + Math.abs(e.clientY - lastY);
+  lastX = e.clientX; lastY = e.clientY;
   clampPitch();
-}, { passive: true });
-canvas.addEventListener('touchend', () => { dragging = false; });
+});
+addEventListener('mouseup', () => { dragging = false; canvas.style.cursor = 'grab'; });
+canvas.style.cursor = 'grab';
+
+canvas.addEventListener('click', e => {
+  if (!started) return enter();
+  if (panelOpen || slip > 6) return;          // that was a look-around drag
+  setNDC(e.clientX, e.clientY);
+  if (lookingAtJukebox()) openPanel();
+});
 
 canvas.addEventListener('wheel', e => {
   e.preventDefault();
   let d = e.deltaY;
   if (e.deltaMode === 1) d *= 16;
   else if (e.deltaMode === 2) d *= 400;
-  const step = Math.max(-0.7, Math.min(0.7, -d * 0.004));
-  camera.position.x += -Math.sin(yaw) * step;
-  camera.position.z += -Math.cos(yaw) * step;
-  resolve(camera.position);
+  scrollStep += Math.max(-0.9, Math.min(0.9, -d * 0.004));
 }, { passive: false });
+
+// ---- touch: thumbstick walks -------------------------------------------
+let stickId = null, lookId = null;
+function aimStick(t) {
+  const r = stick.getBoundingClientRect();
+  const rad = r.width / 2;
+  let dx = (t.clientX - (r.left + rad)) / rad;
+  let dy = (t.clientY - (r.top + rad)) / rad;
+  const len = Math.hypot(dx, dy);
+  if (len > 1) { dx /= len; dy /= len; }
+  move.f = -dy; move.s = dx;
+  knob.style.transform = 'translate(' + (dx * rad * 0.55) + 'px,' + (dy * rad * 0.55) + 'px)';
+}
+function releaseStick() {
+  stickId = null; move.f = move.s = 0;
+  knob.style.transform = 'translate(0px,0px)';
+}
+stick.addEventListener('touchstart', e => {
+  const t = e.changedTouches[0];
+  stickId = t.identifier; aimStick(t); e.preventDefault();
+}, { passive: false });
+stick.addEventListener('touchmove', e => {
+  for (const t of e.changedTouches) if (t.identifier === stickId) { aimStick(t); e.preventDefault(); }
+}, { passive: false });
+['touchend', 'touchcancel'].forEach(ev => stick.addEventListener(ev, e => {
+  for (const t of e.changedTouches) if (t.identifier === stickId) releaseStick();
+}));
+
+// ---- touch: swipe anywhere else looks ----------------------------------
+canvas.addEventListener('touchstart', e => {
+  if (!started) { enter(); return; }
+  const t = e.changedTouches[0];
+  lookId = t.identifier; lastX = downX = t.clientX; lastY = downY = t.clientY; slip = 0;
+}, { passive: true });
+canvas.addEventListener('touchmove', e => {
+  for (const t of e.changedTouches) {
+    if (t.identifier !== lookId) continue;
+    yaw   += (t.clientX - lastX) * 0.006;
+    pitch += (t.clientY - lastY) * 0.006;
+    slip  += Math.abs(t.clientX - lastX) + Math.abs(t.clientY - lastY);
+    lastX = t.clientX; lastY = t.clientY;
+    clampPitch();
+  }
+}, { passive: true });
+canvas.addEventListener('touchend', e => {
+  for (const t of e.changedTouches) {
+    if (t.identifier !== lookId) continue;
+    if (slip < 10 && started && !panelOpen) {      // a tap, not a swipe
+      setNDC(t.clientX, t.clientY);
+      if (lookingAtJukebox()) openPanel();
+    }
+    lookId = null;
+  }
+});
+
+// ---- keys: just the two shortcuts --------------------------------------
+addEventListener('keydown', e => {
+  if (e.repeat) return;
+  if (e.code === 'KeyR') rainLive = !rainLive;
+  if (e.code === 'KeyJ') panelOpen ? closePanel() : openPanel();
+  if (e.code === 'Escape' && panelOpen) closePanel();
+});
 
 /* ----------------------------------------------------------------------
    HOLOGRAM FIGURES
@@ -1377,23 +1389,22 @@ const HOLO_FRAG = `
     vec2 uv = vUv + uParallax * round;
 
     float band = floor(vUv.y * 26.0);
-    float glitch = step(0.986, hash(band + floor(uTime * 8.0)));
-    uv.x += glitch * (hash(band) - 0.5) * 0.05;
+    float glitch = step(0.9965, hash(band + floor(uTime * 8.0)));
+    uv.x += glitch * (hash(band) - 0.5) * 0.018;
 
     float a = keyed(uv);
     if (a < 0.02) discard;
 
-    vec3 src = texture2D(uMap, uv).rgb;
-    float lum = dot(src, vec3(0.299, 0.587, 0.114));
-    vec3 col = uTint * (0.30 + lum * 1.25);
+    // the photo's own colour, lifted slightly so it reads in a dark room
+    vec3 col = texture2D(uMap, uv).rgb * 1.08;
 
     float rim = abs(a - keyed(uv + vec2(0.007, 0.0)))
               + abs(a - keyed(uv + vec2(0.0, 0.007)));
-    col += vec3(0.55, 0.9, 1.0) * clamp(rim, 0.0, 1.0) * 1.5;
-    col *= 0.72 + 0.28 * round;                                     // curve shading
-    col *= 0.87 + 0.13 * sin(vUv.y * 430.0 - uTime * 4.5);          // scanlines
+    col += uTint * clamp(rim, 0.0, 1.0) * 0.45;                     // faint edge light
+    col *= 0.88 + 0.12 * round;                                     // gentle curve shading
+    col *= 0.96 + 0.04 * sin(vUv.y * 430.0 - uTime * 4.5);          // soft scanlines
     float sweep = smoothstep(0.05, 0.0, abs(vUv.y - fract(uTime * 0.17)));
-    col += vec3(0.35, 0.75, 1.0) * sweep * 0.7;                     // rising band
+    col += vec3(0.9, 0.95, 1.0) * sweep * 0.12;                     // rising band
 
     a *= uOpacity * uFlicker;
     a *= smoothstep(0.0, 0.10, vUv.y);
@@ -1404,7 +1415,7 @@ function createHologram(opt) {
   const HEIGHT = opt.height, BASE = opt.base || 0;
   const CLAMP = opt.clamp === undefined ? 0.95 : opt.clamp;
   const PARALLAX = opt.parallax === undefined ? 0.055 : opt.parallax;
-  const TINT = opt.tint || [0.42, 0.86, 1.0];
+  const TINT = opt.tint || [0.75, 0.85, 1.0];   // edge-light colour only
 
   const g = new THREE.Group();
   g.position.set(opt.pos[0], 0, opt.pos[1]);
@@ -1430,7 +1441,7 @@ function createHologram(opt) {
 
   const body = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mkMat(THREE.NormalBlending));
   const aura = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mkMat(THREE.AdditiveBlending));
-  aura.material.uniforms.uOpacity.value = 0.3;
+  aura.material.uniforms.uOpacity.value = 0.10;   // barely-there halo
   aura.position.z = -0.05;
   const mats = [body.material, aura.material];
   g.add(aura, body);
@@ -1440,8 +1451,8 @@ function createHologram(opt) {
     const c = document.createElement('canvas'); c.width = c.height = 128;
     const x = c.getContext('2d');
     const gr = x.createRadialGradient(64, 64, 2, 64, 64, 62);
-    gr.addColorStop(0, 'rgba(130,215,255,0.85)');
-    gr.addColorStop(1, 'rgba(130,215,255,0)');
+    gr.addColorStop(0, 'rgba(205,225,245,0.7)');
+    gr.addColorStop(1, 'rgba(205,225,245,0)');
     x.fillStyle = gr; x.fillRect(0, 0, 128, 128);
     pool = new THREE.Mesh(
       new THREE.PlaneGeometry(HEIGHT * 0.8, HEIGHT * 0.55),
@@ -1457,7 +1468,7 @@ function createHologram(opt) {
 
   let lamp = null;
   if (opt.lamp !== false) {
-    lamp = new THREE.PointLight(0x7fd4ff, 0.9, 4.5, 2);
+    lamp = new THREE.PointLight(0xcfe0f2, 0.7, 4.5, 2);
     lamp.position.set(0, BASE + HEIGHT * 0.8, 0.4);
     g.add(lamp);
   }
@@ -1522,14 +1533,14 @@ function createHologram(opt) {
       }
       const local = body.worldToLocal(camera.position.clone());
       const len = local.length() || 1;
-      const flick = 0.93 + Math.sin(elapsed * 23.0) * 0.03 + Math.sin(elapsed * 7.3) * 0.04;
+      const flick = 0.975 + Math.sin(elapsed * 23.0) * 0.008 + Math.sin(elapsed * 7.3) * 0.012;
       mats.forEach(m => {
         m.uniforms.uTime.value = elapsed;
         m.uniforms.uFlicker.value = flick;
         m.uniforms.uParallax.value.set(local.x / len * PARALLAX, local.y / len * PARALLAX * 0.4);
       });
-      if (pool) pool.material.opacity = 0.38 + Math.sin(elapsed * 2.1) * 0.06;
-      if (lamp) lamp.intensity = 0.8 + (flick - 0.93) * 2.0;
+      if (pool) pool.material.opacity = 0.26 + Math.sin(elapsed * 2.1) * 0.04;
+      if (lamp) lamp.intensity = 0.7 + (flick - 0.975) * 2.0;
     }
   };
 }
@@ -1592,28 +1603,20 @@ fetch(PLAYLIST_URL, { cache: 'no-cache' })
 
 // ---------------------------------------------------------------- jukebox UI
 const jb = document.getElementById('jb');
-const cross = document.getElementById('cross');
 const prompt = document.getElementById('prompt');
 const raycaster = new THREE.Raycaster();
-const CENTER = new THREE.Vector2(0, 0);
-const mouseNDC = new THREE.Vector2(0, 0);
-let panelOpen = false, aiming = false, reLock = false;
 
 function openPanel() {
   if (panelOpen) return;
   panelOpen = true;
   jb.style.display = 'block';
   prompt.style.display = 'none';
-  cross.style.display = 'none';
-  for (const k in keys) keys[k] = false;      // don't keep walking while typing
+  dragging = false;
   PLAYER.render();
-  if (locked()) { reLock = true; document.exitPointerLock(); }
 }
 function closePanel() {
-  if (!panelOpen) return;
   panelOpen = false;
   jb.style.display = 'none';
-  if (reLock) { reLock = false; canvas.requestPointerLock(); }
 }
 
 document.getElementById('jb-close').addEventListener('click', closePanel);
@@ -1622,21 +1625,10 @@ document.getElementById('jb-next').addEventListener('click', () => PLAYER.next()
 document.getElementById('jb-play').addEventListener('click', () => PLAYER.toggle());
 document.getElementById('jb-vol').addEventListener('input', e => PLAYER.setVolume(+e.target.value));
 
-addEventListener('keydown', e => {
-  if (e.code === 'KeyJ' && !e.repeat) panelOpen ? closePanel() : openPanel();
-  if (e.code === 'Escape' && panelOpen) closePanel();
-});
-
-// track the cursor for drag-mode picking; pointer lock aims from the middle
-canvas.addEventListener('mousemove', e => {
-  const r = canvas.getBoundingClientRect();
-  mouseNDC.set((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-});
-
 function lookingAtJukebox() {
-  raycaster.setFromCamera(locked() ? CENTER : mouseNDC, camera);
+  raycaster.setFromCamera(mouseNDC, camera);
   const hit = raycaster.intersectObject(JUKEBOX.group, true)[0];
-  return !!hit && hit.distance < 4.5;
+  return !!hit && hit.distance < 5.0;
 }
 
 // ---------------------------------------------------------------- loop
@@ -1663,35 +1655,24 @@ function animate() {
   BARTENDER.update(elapsed, dt);
   PATRON.update(elapsed, dt);
 
-  if (started && !panelOpen) {
-    aiming = lookingAtJukebox();
-    prompt.style.display = aiming ? 'block' : 'none';
-    cross.style.display = (locked() || (dragMode && mouseLook)) ? 'block' : 'none';
-
-    // no pointer lock: steer from how far the cursor sits off centre, with a
-    // dead zone in the middle so the view holds still while you aim at things
-    if (dragMode && mouseLook && overCanvas && !dragging) {
-      const DEAD = 0.22;
-      const off = v => Math.abs(v) > DEAD ? (v - Math.sign(v) * DEAD) / (1 - DEAD) : 0;
-      yaw -= off(mouseNDC.x) * 2.0 * dt;
-      pitch += off(mouseNDC.y) * 1.2 * dt;
-      clampPitch();
-    }
+  if (started && !panelOpen && !touch) {
+    const aim = lookingAtJukebox();
+    prompt.style.display = aim ? 'block' : 'none';
+    if (aim) {
+      prompt.style.left = (lastPX + 18) + 'px';
+      prompt.style.top  = (lastPY + 16) + 'px';
+      if (!dragging) canvas.style.cursor = 'pointer';
+    } else if (!dragging) canvas.style.cursor = 'grab';
   }
 
   // screens only need ~12fps, which keeps the canvas work off the critical path
   repaint += dt;
   if (repaint > 1 / 12) { feeds.forEach(f => paint(f, elapsed)); repaint = 0; }
 
-  // arrows look around, WASD moves - so the room works with no mouse at all
-  const turn = panelOpen ? 0 : (keys.ArrowLeft || keys.KeyQ ? 1 : 0) - (keys.ArrowRight || keys.KeyE ? 1 : 0);
-  yaw += turn * 1.9 * dt;
-  const tilt = (keys.ArrowUp ? 1 : 0) - (keys.ArrowDown ? 1 : 0);
-  if (tilt) { pitch += tilt * 1.4 * dt; clampPitch(); }
-
-  const f = panelOpen ? 0 : (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0);
-  const s = panelOpen ? 0 : (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
-  const speed = keys.ShiftLeft || keys.ShiftRight ? 5.0 : 2.6;
+  // walking comes from the thumbstick on touch and the wheel on desktop
+  const f = panelOpen ? 0 : move.f;
+  const s = panelOpen ? 0 : move.s;
+  const speed = 2.6;
 
   const dir = new THREE.Vector3(
     Math.sin(yaw) * -f + Math.cos(yaw) * s,
@@ -1702,6 +1683,14 @@ function animate() {
 
   velocity.lerp(dir.multiplyScalar(speed), 1 - Math.pow(0.0008, dt));
   camera.position.addScaledVector(velocity, dt);
+
+  // wheel steps glide in rather than teleporting
+  if (Math.abs(scrollStep) > 0.0005) {
+    const take = scrollStep * Math.min(1, dt * 9);
+    camera.position.x += -Math.sin(yaw) * take;
+    camera.position.z += -Math.cos(yaw) * take;
+    scrollStep -= take;
+  }
   camera.position.y = EYE;
   resolve(camera.position);
 

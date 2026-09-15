@@ -1523,6 +1523,7 @@ const HOLO_FRAG = `
   uniform sampler2D uMap;
   uniform vec3 uKey, uTint;
   uniform float uTol, uSoft, uTime, uOpacity, uFlicker, uFade, uSolid, uAlphaOnly;
+  uniform float uFx, uGain, uGamma;
   uniform vec2 uParallax;
   varying vec2 vUv;
 
@@ -1543,7 +1544,7 @@ const HOLO_FRAG = `
 
     float band = floor(vUv.y * 26.0);
     float glitch = step(0.9965, hash(band + floor(uTime * 8.0)));
-    uv.x += glitch * (hash(band) - 0.5) * 0.018;
+    uv.x += glitch * (hash(band) - 0.5) * 0.018 * uFx;
 
     float a = keyed(uv);
     // A colour key leaves partial alpha wherever the subject's own tones sit near
@@ -1551,16 +1552,16 @@ const HOLO_FRAG = `
     if (uSolid > 0.5) a = smoothstep(0.28, 0.55, a);
     if (a < 0.02) discard;
 
-    // the photo's own colour, lifted slightly so it reads in a dark room
-    vec3 col = texture2D(uMap, uv).rgb * 1.08;
+    // gamma below 1 opens up the shadows, so a dark photo still reads as a face
+    vec3 col = pow(max(texture2D(uMap, uv).rgb, 0.0), vec3(uGamma)) * uGain;
 
     float rim = abs(a - keyed(uv + vec2(0.007, 0.0)))
               + abs(a - keyed(uv + vec2(0.0, 0.007)));
-    col += uTint * clamp(rim, 0.0, 1.0) * 0.45;                     // faint edge light
+    col += uTint * clamp(rim, 0.0, 1.0) * 0.45;                     // edge light, always on
     col *= 0.88 + 0.12 * round;                                     // gentle curve shading
-    col *= 0.96 + 0.04 * sin(vUv.y * 430.0 - uTime * 4.5);          // soft scanlines
+    col *= mix(1.0, 0.96 + 0.04 * sin(vUv.y * 430.0 - uTime * 4.5), uFx);
     float sweep = smoothstep(0.05, 0.0, abs(vUv.y - fract(uTime * 0.17)));
-    col += vec3(0.9, 0.95, 1.0) * sweep * 0.12;                     // rising band
+    col += vec3(0.9, 0.95, 1.0) * sweep * 0.12 * uFx;               // rising band
 
     a *= uOpacity * uFlicker;
     if (uFade > 0.001) a *= smoothstep(0.0, uFade, vUv.y);   // dissolve at the base
@@ -1589,6 +1590,9 @@ function createHologram(opt) {
     uFade:     { value: opt.fade === undefined ? 0.10 : opt.fade },
     uSolid:    { value: opt.solid ? 1 : 0 },
     uAlphaOnly:{ value: 0 },
+    uFx:       { value: opt.fx === undefined ? 1 : opt.fx },
+    uGain:     { value: opt.gain === undefined ? 1.08 : opt.gain },
+    uGamma:    { value: opt.gamma === undefined ? 1 : opt.gamma },
     uParallax: { value: new THREE.Vector2() },
     uTint:     { value: new THREE.Vector3().fromArray(TINT) }
   };
@@ -1666,25 +1670,35 @@ function createHologram(opt) {
     for (let j = 0; j < h; j++) { seed(j * w); seed(j * w + w - 1); }
     sr /= n; sg /= n; sb /= n;
 
-    const tol = (opt.keyTol === undefined ? 0.30 : opt.keyTol) * 255 * 1.732;
-    const seen = new Uint8Array(w * h);
-    const stack = [];
-    for (let i = 0; i < w; i++) { stack.push(i, (h - 1) * w + i); }
-    for (let j = 0; j < h; j++) { stack.push(j * w, j * w + w - 1); }
-    while (stack.length) {
-      const k = stack.pop();
-      if (seen[k]) continue;
-      seen[k] = 1;
-      const o = k * 4;
-      const dr = px[o] - sr, dg = px[o + 1] - sg, db = px[o + 2] - sb;
-      if (Math.sqrt(dr * dr + dg * dg + db * db) > tol) continue;
-      px[o + 3] = 0;
-      const cx = k % w, cy = (k - cx) / w;
-      if (cx > 0) stack.push(k - 1);
-      if (cx < w - 1) stack.push(k + 1);
-      if (cy > 0) stack.push(k - w);
-      if (cy < h - 1) stack.push(k + w);
+    // On a dark photo the subject and the backdrop are close in colour, so a
+    // generous tolerance lets the fill leak straight through the figure. Run it,
+    // measure how much it ate, and back the tolerance off if it clearly bled.
+    let tol = (opt.keyTol === undefined ? 0.17 : opt.keyTol) * 255 * 1.732;
+    let mask = null;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      mask = new Uint8Array(w * h);
+      const stack = [];
+      for (let i = 0; i < w; i++) { stack.push(i, (h - 1) * w + i); }
+      for (let j = 0; j < h; j++) { stack.push(j * w, j * w + w - 1); }
+      let cut = 0;
+      while (stack.length) {
+        const k = stack.pop();
+        if (mask[k]) continue;
+        mask[k] = 1;
+        const o = k * 4;
+        const dr = px[o] - sr, dg = px[o + 1] - sg, db = px[o + 2] - sb;
+        if (Math.sqrt(dr * dr + dg * dg + db * db) > tol) { mask[k] = 2; continue; }
+        cut++;
+        const cx = k % w, cy = (k - cx) / w;
+        if (cx > 0) stack.push(k - 1);
+        if (cx < w - 1) stack.push(k + 1);
+        if (cy > 0) stack.push(k - w);
+        if (cy < h - 1) stack.push(k + w);
+      }
+      if (cut / (w * h) < 0.86) break;          // sane result, keep it
+      tol *= 0.5;                                // it bled through - tighten and retry
     }
+    for (let k = 0; k < w * h; k++) if (mask[k] === 1) px[k * 4 + 3] = 0;
     // one pass of alpha blur so the silhouette isn't a jagged stair-step
     const a0 = new Uint8ClampedArray(w * h);
     for (let i = 0; i < w * h; i++) a0[i] = px[i * 4 + 3];
@@ -1761,7 +1775,8 @@ function createHologram(opt) {
       }
       const local = body.worldToLocal(TMP.copy(camera.position));
       const len = local.length() || 1;
-      const flick = 0.975 + Math.sin(elapsed * 23.0) * 0.008 + Math.sin(elapsed * 7.3) * 0.012;
+      const fx = opt.fx === undefined ? 1 : opt.fx;
+      const flick = 1 - (0.025 - Math.sin(elapsed * 23.0) * 0.008 - Math.sin(elapsed * 7.3) * 0.012) * fx;
       mats.forEach(m => {
         m.uniforms.uTime.value = elapsed;
         m.uniforms.uFlicker.value = flick;
@@ -1779,6 +1794,7 @@ function createHologram(opt) {
 const BARTENDER = createHologram({
   src: 'ejak.jpg',
   height: 1.35, base: 1.05, pos: [barX, -4.55],   // barX is -1.5, same as the sign
+  clamp: Math.PI / 4,      // turns through 90 degrees total, 45 either side
   pool: false, lamp: false,
   placeholder: 'stand'
 });
@@ -1795,6 +1811,9 @@ const PATRON = createHologram({
   parallax: 0.045,
   opacity: 1.0,            // fully solid, not a see-through projection
   solid: true,             // snap the keyed alpha so the wall can't show through
+  keyTol: 0.13,            // dark photo: keep the fill from bleeding into him
+  gain: 1.85, gamma: 0.70, // lift the shadows so his face isn't a silhouette
+  fx: 0.2,                 // almost no scanline, sweep, glitch or flicker
   fade: 0,                 // no dissolve across his lap
   aura: false,             // the additive halo was washing him out
   pool: false, lamp: false,

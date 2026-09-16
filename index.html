@@ -29,6 +29,11 @@
     position:fixed; left:16px; bottom:14px; color:#6b5c45; pointer-events:none;
     font:400 12px/1.4 ui-monospace, Menlo, Consolas, monospace; letter-spacing:.08em;
   }
+  #stats {
+    position:fixed; left:14px; top:14px; z-index:30; display:none; pointer-events:none;
+    padding:9px 12px; background:rgba(6,10,15,.82); border:1px solid #27394c; color:#9fe0ff;
+    font:500 11px/1.6 ui-monospace, Menlo, Consolas, monospace; white-space:pre;
+  }
   #prompt {
     position:fixed; display:none; pointer-events:none; padding:6px 14px; border-radius:3px;
     background:rgba(8,8,12,.85); border:1px solid #ff3b3b; color:#ffe6b0;
@@ -186,6 +191,7 @@
 </div></div>
 <div id="hint">esc to release the mouse</div>
 <div id="prompt">JUKEBOX &mdash; click</div>
+<div id="stats"></div>
 
 <div id="chat">
   <div class="jb-head chat-title"><span>EJAK &mdash; Electronic Jak</span><button id="chat-close" title="close">&#10005;</button></div>
@@ -238,7 +244,9 @@ const touch   = matchMedia("(pointer: coarse)").matches;
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 // Phones have dense screens and weak GPUs, which is the worst combination:
 // rendering at 2x there costs four times the pixels for no visible gain.
-const PR_CAP = Math.min(devicePixelRatio, matchMedia('(pointer: coarse)').matches ? 1.0 : 1.5);
+// 1.0 on a phone is noticeably soft. Start at 1.25 and let the adaptive step
+// below walk it down to 0.75 only if that particular device can't keep up.
+const PR_CAP = Math.min(devicePixelRatio, matchMedia('(pointer: coarse)').matches ? 1.25 : 1.5);
 let pixelRatio = PR_CAP;
 renderer.setPixelRatio(pixelRatio);
 renderer.setSize(innerWidth, innerHeight);
@@ -1617,6 +1625,10 @@ addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.repeat) return;
   if (e.code === 'KeyR') rainLive = !rainLive;
+  if (e.code === 'KeyP') {
+    statsOn = !statsOn;
+    statsBox.style.display = statsOn ? 'block' : 'none';
+  }
   if (e.code === 'KeyJ') panelOpen ? closePanel() : openPanel();
 });
 
@@ -1894,7 +1906,21 @@ function createHologram(opt) {
     apply(c, new THREE.CanvasTexture(c));
   }
 
-  new THREE.TextureLoader().load(opt.src, tex => apply(tex.image, tex), undefined, placeholder);
+  // Accept a list and take the first that loads, so swapping a jpg for a png
+  // needs no code change. A miss on all of them logs rather than failing mute.
+  const sources = Array.isArray(opt.src) ? opt.src.slice() : [opt.src];
+  (function tryLoad(i) {
+    if (i >= sources.length) {
+      console.warn('hologram: none of these loaded ->', sources.join(', '));
+      return placeholder();
+    }
+    new THREE.TextureLoader().load(
+      sources[i],
+      tex => apply(tex.image, tex),
+      undefined,
+      () => tryLoad(i + 1)
+    );
+  })(0);
 
   return {
     group: g,
@@ -1924,7 +1950,7 @@ function createHologram(opt) {
 // bar top surface sits at 1.22, so the image starts just below it and
 // finishes just under the video wall at 2.42
 const BARTENDER = createHologram({
-  src: 'ejak.jpg',
+  src: ['ejak.png', 'ejak.jpg'],
   height: 1.28, base: 0.99, pos: [barX, -4.02],   // 95% size, nudged up, right against
   clamp: Math.PI / 4,      // the back of the bar so he reads as close to you
   fade: 0,                 // no dissolve at the hem - he stays solid to the bottom
@@ -1935,7 +1961,7 @@ const BARTENDER = createHologram({
 // ---- the regular, sitting in the corner booth with his back to the wall -
 // bench centre works out to x 7.10, backrest at z -5.90
 const PATRON = createHologram({
-  src: 'strider.jpg',
+  src: ['strider.png', 'strider.jpg'],
   height: 1.55,            // bottom of the image to the top of his head
   base: 0.52,              // sitting on the cushion
   pos: [7.12, -5.66],
@@ -2592,6 +2618,11 @@ document.getElementById('exit-go').addEventListener('click', () => {
 // ---------------------------------------------------------------- loop
 const velocity = new THREE.Vector3();
 const clock = new THREE.Clock();
+const statsBox = document.getElementById('stats');
+let statsOn = false, statsTick = 0, frames = 0;
+let lightCount = 0;
+scene.traverse(o => { if (o.isLight && o.isPointLight) lightCount++; });
+
 let elapsed = 0, repaint = 0, rainTick = 0, hoverTick = 0, feedTurn = 0;
 let frameAvg = 1 / 60, adaptTick = 0;
 let hovering = false;
@@ -2688,6 +2719,23 @@ function animate() {
 
   camera.rotation.set(pitch, yaw, 0);   // YXZ order, so roll stays at zero
   renderer.render(scene, camera);
+
+  // press P for the actual numbers rather than an estimate
+  frames++;
+  statsTick += dt;
+  if (statsOn && statsTick > 0.4) {
+    const r = renderer.info.render, m = renderer.info.memory;
+    statsBox.textContent =
+      'fps        ' + Math.round(frames / statsTick) + '\n' +
+      'draw calls ' + r.calls + '\n' +
+      'triangles  ' + r.triangles.toLocaleString() + '\n' +
+      'geometries ' + m.geometries + '\n' +
+      'textures   ' + m.textures + '\n' +
+      'lights     ' + lightCount + '\n' +
+      'pixelRatio ' + pixelRatio.toFixed(2) + '  (' +
+        Math.round(innerWidth * pixelRatio) + 'x' + Math.round(innerHeight * pixelRatio) + ')';
+    statsTick = 0; frames = 0;
+  } else if (statsTick > 0.4) { statsTick = 0; frames = 0; }
 }
 renderer.compile(scene, camera);   // build every shader up front, not mid-drag
 animate();

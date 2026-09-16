@@ -1886,8 +1886,9 @@ function createHologram(opt) {
 // finishes just under the video wall at 2.42
 const BARTENDER = createHologram({
   src: 'ejak.jpg',
-  height: 1.35, base: 1.05, pos: [barX, -4.55],   // barX is -1.5, same as the sign
-  clamp: Math.PI / 4,      // turns through 90 degrees total, 45 either side
+  height: 1.35, base: 0.95, pos: [barX, -4.02],   // lowered, and right up against
+  clamp: Math.PI / 4,      // the back of the bar so he reads as close to you
+  fade: 0,                 // no dissolve at the hem - he stays solid to the bottom
   pool: false, lamp: false,
   placeholder: 'stand'
 });

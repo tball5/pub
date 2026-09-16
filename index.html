@@ -106,12 +106,14 @@
   @media (pointer: coarse), (max-width: 700px) {
     #chat { left:8px; right:8px; top:8px; bottom:auto; width:auto; transform:none; }
     #jb {
-      left:auto; right:8px; bottom:8px; top:auto; width:212px; transform:none;
+      left:auto; right:8px; bottom:8px; top:auto; width:186px; transform:none;
     }
-    #jb .jb-head { cursor:default; }      /* locked in the corner on a phone */
-    #jb-list { max-height:104px; }
-    #jb-list li { padding:6px 10px 6px 12px; font-size:11px; }
-    .jb-ctrls button { min-width:32px; padding:7px 0; }
+    #jb .jb-head { cursor:default; font-size:10px; padding:7px 9px; }
+    #jb-list { max-height:78px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+    #jb-list li { padding:5px 9px 5px 11px; font-size:10.5px; }
+    .jb-note { display:none; }
+    .jb-ctrls { gap:4px; padding:7px 9px; }
+    .jb-ctrls button { min-width:26px; padding:6px 0; font-size:10px; }
     #chat, #jb {
       background:rgba(9,14,20,.55);
       -webkit-backdrop-filter:blur(7px); backdrop-filter:blur(7px);
@@ -135,7 +137,7 @@
     clip-path:polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
     font:400 13px/1.5 "Helvetica Neue", Arial, sans-serif;
   }
-  #jb { right:22px; bottom:22px; width:318px; }
+  #jb { right:22px; top:50%; transform:translateY(-50%); width:318px; }
   .jb-head {
     position:relative; display:flex; align-items:center; justify-content:space-between;
     padding:11px 14px 10px; cursor:move; touch-action:none;
@@ -383,8 +385,11 @@ const mat = {
   chrome:  new THREE.MeshPhongMaterial({ color: 0xc9973f, specular: 0xffe2a8, shininess: 120, reflectivity: 1 }),
   seat:    new THREE.MeshPhongMaterial({ color: 0x6e2024, specular: 0x2e1a1c, shininess: 20 }),
   dark:    new THREE.MeshPhongMaterial({ color: 0x1b1209, specular: 0x191512, shininess: 16 }),
-  door:    new THREE.MeshPhongMaterial({ color: 0x7c2622, specular: 0x4a3a34, shininess: 45 }),
-  steel:   new THREE.MeshPhongMaterial({ color: 0x8d949c, specular: 0xdfe6ee, shininess: 90 }),
+  // a touch of emissive lifts the door out of the gloom without costing a light
+  door:    new THREE.MeshPhongMaterial({ color: 0x8c2c27, specular: 0x4a3a34, shininess: 45,
+                                         emissive: 0x2a0f0d }),
+  steel:   new THREE.MeshPhongMaterial({ color: 0x9aa2ab, specular: 0xdfe6ee, shininess: 90,
+                                         emissive: 0x161a1e }),
 };
 const glow  = new THREE.MeshBasicMaterial({ color: RED });
 const glowV = new THREE.MeshBasicMaterial({ color: BLUE });
@@ -2232,8 +2237,7 @@ function buildAvatars() {
   const seats = [
     [3, -1, '#5fe9ff'], [3,  1, '#8ff7ff'],  // right wall, facing pair
     [0, -1, '#ff6ed2'], [0,  1, '#8ff7ff'],  // left booth: one pink, one blue
-    [1, -1, '#3dffaa'],                      // a scattering in the other booths
-    [4,  1, '#5fe9ff']
+    [1, -1, '#3dffaa']                       // a scattering in the other booths
   ];
   // four smaller ones packed into the booth by the door, two to a bench,
   // greens and blues crossed corner to corner
@@ -2284,21 +2288,7 @@ function buildAvatars() {
     av.restL = -0.86;
     avatars.push(av);
   }
-  // two at the round table on the jukebox side
-  const servedTables = [];
-  const CHAIR_HIP = 0.58;                    // chair seat is 0.50
-  [['#b98cff', 0], ['#ff6ed2', 1]].forEach(([c, a], i) => {
-    const [tx, tz] = TABLES[0];
-    const ang = a * Math.PI + Math.PI / 5;   // matches how the chairs are placed
-    const av = makeAvatar(c, { seated: true, hip: CHAIR_HIP });
-    av.mode = 'sit';
-    av.root.position.set(tx + Math.cos(ang), 0, tz + Math.sin(ang));
-    av.root.rotation.y = -ang - Math.PI / 2; // facing the table, same as the chair
-    av.restR = -0.89;                        // glass on the tabletop at 0.775
-    av.restL = -0.84;
-    avatars.push(av);
-    if (servedTables.indexOf(0) < 0) servedTables.push(0);
-  });
+  const servedTables = [];   // round tables are empty, so she skips them
 
   avatars.push(makeServer(served, servedTables));
   updateAvatars(0, 0);

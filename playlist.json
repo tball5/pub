@@ -3,7 +3,7 @@
   "chat": {
     "url": "https://ejak.thill5523.workers.dev/",
     "persona": "ejak.md",
-    "greeting": "What'll it be?"
+    "greeting": "Yo!"
   },
   "exit": {
     "label": "Leave The Pub?",

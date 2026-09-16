@@ -1,7 +1,7 @@
 {
   "baseUrl": "tracks/",
   "chat": {
-    "url": "https://pub-ejak.YOURNAME.workers.dev",
+    "url": "https://ejak.thill5523.workers.dev/",
     "persona": "ejak.md",
     "greeting": "What'll it be?"
   },

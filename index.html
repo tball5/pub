@@ -101,11 +101,12 @@
   #exit-go:hover { border-color:#ff3b3b; color:#fff; }
   #exit-stay:hover { border-color:#8b7a63; }
   #exit-go[disabled] { opacity:.45; cursor:not-allowed; }
-  /* On a phone the panels took the whole screen. Shrink them, let the room show
-     through, and keep them clear of the thumbstick in the bottom-left. */
+  /* On a phone the panels took the whole screen. Shrink them, let the room
+     show through, and keep the chat and the jukebox at opposite ends. */
   @media (pointer: coarse), (max-width: 700px) {
+    #chat { left:8px; right:8px; top:8px; bottom:auto; width:auto; transform:none; }
+    #jb   { left:8px; right:8px; bottom:8px; top:auto; width:auto; transform:none; }
     #chat, #jb {
-      left:8px; right:8px; top:8px; bottom:auto; width:auto; transform:none;
       background:rgba(9,14,20,.55);
       -webkit-backdrop-filter:blur(7px); backdrop-filter:blur(7px);
       border-color:rgba(70,110,145,.55);
@@ -119,16 +120,6 @@
     .jb-note { margin:6px 11px; }
   }
 
-  #stick {
-    position:fixed; left:24px; bottom:28px; width:132px; height:132px; display:none;
-    border-radius:50%; background:rgba(10,14,20,.42); border:2px solid rgba(255,255,255,.22);
-    touch-action:none; z-index:15;
-  }
-  #knob {
-    position:absolute; left:50%; top:50%; width:56px; height:56px; margin:-28px 0 0 -28px;
-    border-radius:50%; background:rgba(230,240,255,.5); border:2px solid rgba(255,255,255,.5);
-    box-shadow:0 0 18px rgba(120,190,255,.45);
-  }
   #jb, #chat {
     position:fixed; z-index:22; display:none; overflow:hidden;
     background:linear-gradient(160deg, #0d1219 0%, #070a0f 60%, #05080c 100%);
@@ -138,7 +129,7 @@
     clip-path:polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
     font:400 13px/1.5 "Helvetica Neue", Arial, sans-serif;
   }
-  #jb { right:22px; top:50%; transform:translateY(-50%); width:318px; }
+  #jb { right:22px; bottom:22px; width:318px; }
   .jb-head {
     position:relative; display:flex; align-items:center; justify-content:space-between;
     padding:11px 14px 10px; cursor:move; touch-action:none;
@@ -190,7 +181,6 @@
 </div></div>
 <div id="hint">esc to release the mouse</div>
 <div id="prompt">JUKEBOX &mdash; click</div>
-<div id="stick"><div id="knob"></div></div>
 
 <div id="chat">
   <div class="jb-head chat-title"><span>EJAK &mdash; Electronic Jak</span><button id="chat-close" title="close">&#10005;</button></div>
@@ -241,7 +231,9 @@ const touch   = matchMedia("(pointer: coarse)").matches;
 
 // ---------------------------------------------------------------- renderer
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-const PR_CAP = Math.min(devicePixelRatio, 1.5);   // 2x on a large display is 4x the pixels
+// Phones have dense screens and weak GPUs, which is the worst combination:
+// rendering at 2x there costs four times the pixels for no visible gain.
+const PR_CAP = Math.min(devicePixelRatio, matchMedia('(pointer: coarse)').matches ? 1.0 : 1.5);
 let pixelRatio = PR_CAP;
 renderer.setPixelRatio(pixelRatio);
 renderer.setSize(innerWidth, innerHeight);
@@ -630,7 +622,9 @@ TABLES.forEach(([x, z]) => table(x, z));
 const BOOTH_W = 1.9, BOOTH_D = 1.7;   // width along the wall, depth out from it
 
 const BOOTH_GROUPS = [];
-const BOOTH_LAMPS = [0, 3, 6, 7];
+// Two lamps instead of four: booth 3 covers the whole right wall, booth 6 the
+// left and the doorway. Every point light is paid for on every lit pixel.
+const BOOTH_LAMPS = touch ? [3] : [3, 6];
 function booth(x, z, ry, i, sides) {
   const g = new THREE.Group();
   const accent = i % 2 ? glowV : glow;
@@ -650,7 +644,7 @@ function booth(x, z, ry, i, sides) {
   // right wall, 0 reaches 1 on the left, and the two entry booths are far apart
   // enough to need their own. The corner is left dark on purpose - Strider's.
   if (BOOTH_LAMPS.indexOf(i) >= 0) {
-    const lamp = new THREE.PointLight(0xffc48a, 1.35, 4.5, 2);
+    const lamp = new THREE.PointLight(0xffc48a, 2.1, 7.5, 2);
     lamp.position.set(0, 1.62, -0.1);
     g.add(lamp);
   }
@@ -1447,8 +1441,6 @@ function resolve(pos) {
 const canvas = renderer.domElement;
 const hud    = document.getElementById('hud');
 const hint   = document.getElementById('hint');
-const stick  = document.getElementById('stick');
-const knob   = document.getElementById('knob');
 
 let yaw = 0;            // 0 looks down -Z, straight at the bar
 let pitch = 0;
@@ -1468,11 +1460,13 @@ function measureLook() {
 }
 measureLook();
 
-let started = false, rainLive = false, panelOpen = false;
+let started = false, rainLive = false;
+let jbOpen = false, chatOpen = false, exitOpen = false;
+let panelOpen = false;      // any panel showing - used to mute hover prompts
+const syncPanels = () => { panelOpen = jbOpen || chatOpen || exitOpen; };
 let dragging = false, lastX = 0, lastY = 0, downX = 0, downY = 0, slip = 0;
 let lastPX = 0, lastPY = 0;         // cursor position, for the hover label
 const mouseNDC = new THREE.Vector2(0, 0);
-const move = { f: 0, s: 0 };        // forward / strafe, -1..1, from the thumbstick
 let scrollStep = 0;
 
 // A browser won't let audio play until the page has seen a gesture, so the
@@ -1491,9 +1485,8 @@ function enter() {
   started = true;
   hud.style.opacity = '0';
   setTimeout(() => { hud.style.display = 'none'; }, 600);
-  hint.textContent = touch ? 'thumbstick to walk, swipe to look'
+  hint.textContent = touch ? 'swipe to look, pinch or spread to move'
                            : 'WASD or arrows to walk, drag to look';
-  if (touch) stick.style.display = 'block';
   armAudio();
 }
 setTimeout(enter, 1000);        // one second of welcome, then you're in
@@ -1534,7 +1527,7 @@ setCursor('grab');
 
 canvas.addEventListener('click', e => {
   if (!started) return enter();
-  if (panelOpen || slip > 6) return;          // that was a look-around drag
+  if (exitOpen || slip > 6) return;          // that was a look-around drag
   setNDC(e.clientX, e.clientY);
   const hitTarget = pickTarget();
   if (hitTarget === 'jukebox') openPanel();
@@ -1550,40 +1543,30 @@ canvas.addEventListener('wheel', e => {
   scrollStep += Math.max(-0.9, Math.min(0.9, -d * 0.004));
 }, { passive: false });
 
-// ---- touch: thumbstick walks -------------------------------------------
-let stickId = null, lookId = null;
-function aimStick(t) {
-  const r = stick.getBoundingClientRect();
-  const rad = r.width / 2;
-  let dx = (t.clientX - (r.left + rad)) / rad;
-  let dy = (t.clientY - (r.top + rad)) / rad;
-  const len = Math.hypot(dx, dy);
-  if (len > 1) { dx /= len; dy /= len; }
-  move.f = -dy; move.s = dx;
-  knob.style.transform = 'translate(' + (dx * rad * 0.55) + 'px,' + (dy * rad * 0.55) + 'px)';
-}
-function releaseStick() {
-  stickId = null; move.f = move.s = 0;
-  knob.style.transform = 'translate(0px,0px)';
-}
-stick.addEventListener('touchstart', e => {
-  const t = e.changedTouches[0];
-  stickId = t.identifier; aimStick(t); e.preventDefault();
-}, { passive: false });
-stick.addEventListener('touchmove', e => {
-  for (const t of e.changedTouches) if (t.identifier === stickId) { aimStick(t); e.preventDefault(); }
-}, { passive: false });
-['touchend', 'touchcancel'].forEach(ev => stick.addEventListener(ev, e => {
-  for (const t of e.changedTouches) if (t.identifier === stickId) releaseStick();
-}));
-
-// ---- touch: swipe anywhere else looks ----------------------------------
+// ---- touch: one finger looks, two fingers walk -------------------------
+// Spreading two fingers moves you forward, pinching them moves you back - the
+// same glide the mouse wheel drives, so both devices behave the same way.
+let lookId = null, pinching = false, pinchLast = 0;
+const spread = e => Math.hypot(
+  e.touches[0].clientX - e.touches[1].clientX,
+  e.touches[0].clientY - e.touches[1].clientY
+);
 canvas.addEventListener('touchstart', e => {
   if (!started) { enter(); return; }
+  if (e.touches.length >= 2) {
+    pinching = true; lookId = null; pinchLast = spread(e);
+    return;
+  }
   const t = e.changedTouches[0];
   lookId = t.identifier; lastX = downX = t.clientX; lastY = downY = t.clientY; slip = 0;
 }, { passive: true });
 canvas.addEventListener('touchmove', e => {
+  if (pinching && e.touches.length >= 2) {
+    const d = spread(e);
+    scrollStep += Math.max(-0.5, Math.min(0.5, (d - pinchLast) * 0.010));
+    pinchLast = d;
+    return;
+  }
   for (const t of e.changedTouches) {
     if (t.identifier !== lookId) continue;
     yaw   += (t.clientX - lastX) * radPerPxX * 1.25;
@@ -1594,9 +1577,10 @@ canvas.addEventListener('touchmove', e => {
   }
 }, { passive: true });
 canvas.addEventListener('touchend', e => {
+  if (pinching) { if (e.touches.length < 2) pinching = false; return; }
   for (const t of e.changedTouches) {
     if (t.identifier !== lookId) continue;
-    if (slip < 10 && started && !panelOpen) {      // a tap, not a swipe
+    if (slip < 10 && started && !exitOpen) {      // a tap, not a swipe
       setNDC(t.clientX, t.clientY);
       const tapped = pickTarget();
       if (tapped === 'jukebox') openPanel();
@@ -2028,8 +2012,7 @@ function makeAvatar(color, opt) {
   // the arm runs 0.64 from the shoulder pivot, so the hand sits at its end
   const hand = new THREE.Group();
   hand.position.set(0, -0.62, 0.03);
-  hand.add(new THREE.Mesh(AV.glass, BEER_MAT));
-  hand.add(new THREE.Mesh(AV.foam, FOAM_MAT));
+  hand.add(new THREE.Mesh(AV.glass, BEER_MAT));   // foam dropped: 16 fewer draws
   armR.add(hand);
 
   const head = part(AV.head, 0, hip + 0.81, body);
@@ -2392,15 +2375,15 @@ const prompt = document.getElementById('prompt');
 const raycaster = new THREE.Raycaster();
 
 function openPanel() {
-  if (panelOpen) return;
-  panelOpen = true;
+  if (jbOpen) return;
+  jbOpen = true; syncPanels();
   jb.style.display = 'block';
   prompt.style.display = 'none';
   dragging = false;
   PLAYER.render();
 }
 function closePanel() {
-  panelOpen = false;
+  jbOpen = false; syncPanels();
   jb.style.display = 'none';
 }
 
@@ -2471,7 +2454,7 @@ const chatBox = document.getElementById('chat');
 const chatLog = document.getElementById('chat-log');
 const chatIn  = document.getElementById('chat-in');
 const chatHistory = [];
-let chatBusy = false, chatGreeted = false, chatOpen = false;
+let chatBusy = false, chatGreeted = false;
 makeDraggable(chatBox, document.querySelector('#chat .jb-head'));
 
 function chatSay(who, text, cls) {
@@ -2493,8 +2476,8 @@ function chatSay(who, text, cls) {
 }
 
 function openChat() {
-  if (panelOpen) return;
-  panelOpen = true; chatOpen = true;
+  if (chatOpen) return;
+  chatOpen = true; syncPanels();
   chatBox.style.display = 'block';
   prompt.style.display = 'none';
   dragging = false;
@@ -2509,7 +2492,7 @@ function openChat() {
   setTimeout(() => chatIn.focus(), 30);
 }
 function closeChat() {
-  panelOpen = false; chatOpen = false;
+  chatOpen = false; syncPanels();
   chatBox.style.display = 'none';
   chatIn.blur();
 }
@@ -2536,9 +2519,10 @@ async function chatSend() {
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
-    const reply = data.reply
+    // models routinely open with a newline; pre-wrap would render it as a gap
+    const reply = String(data.reply
       || (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content)
-      || '(empty reply)';
+      || '(empty reply)').trim();
     bubble.textContent = reply;
     bubble.classList.remove('pending');
     chatHistory.push({ role: 'assistant', content: reply });
@@ -2565,8 +2549,8 @@ chatIn.addEventListener('keydown', e => {
 let EXIT_URL = null, EXIT_LABEL = 'Leave The Pub?';
 const exitBox = document.getElementById('exit');
 function openExit() {
-  if (panelOpen) return;
-  panelOpen = true;
+  if (exitOpen) return;
+  exitOpen = true; syncPanels();
   exitBox.style.display = 'block';
   prompt.style.display = 'none';
   dragging = false;
@@ -2582,7 +2566,7 @@ function openExit() {
     sub.textContent = 'no exit set in playlist.json';
   }
 }
-function closeExit() { panelOpen = false; exitBox.style.display = 'none'; }
+function closeExit() { exitOpen = false; syncPanels(); exitBox.style.display = 'none'; }
 document.getElementById('exit-stay').addEventListener('click', closeExit);
 document.getElementById('exit-go').addEventListener('click', () => {
   if (EXIT_URL) location.href = EXIT_URL;
@@ -2652,15 +2636,13 @@ function animate() {
   // screens only need ~12fps, which keeps the canvas work off the critical path
   // one feed per tick instead of all five, so the upload cost is spread out
   repaint += dt;
-  if (repaint > 1 / 30) { paint(feeds[feedTurn++ % feeds.length], elapsed); repaint = 0; }
+  if (repaint > 1 / 12) { paint(feeds[feedTurn++ % feeds.length], elapsed); repaint = 0; }
 
   // walking comes from the keyboard, the thumbstick, and the wheel.
   // On a phone the chat is small enough to walk around with it open.
-  const held = panelOpen && !(touch && chatOpen);
-  const kf = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
-  const ks = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
-  const f = held ? 0 : Math.max(-1, Math.min(1, move.f + kf));
-  const s = held ? 0 : Math.max(-1, Math.min(1, move.s + ks));
+  const held = exitOpen;                 // only the exit dialog stops you moving
+  const f = held ? 0 : (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
+  const s = held ? 0 : (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
   const speed = (keys.ShiftLeft || keys.ShiftRight) ? 4.6 : 2.6;
 
   const turn = held ? 0 : (keys.KeyQ ? 1 : 0) - (keys.KeyE ? 1 : 0);

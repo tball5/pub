@@ -163,7 +163,7 @@
      why the jukebox was still sitting mid-screen on phones. */
   @media (pointer: coarse), (max-width: 700px) {
     #chat { left:8px; right:8px; top:8px; bottom:auto; width:auto; transform:none; }
-    #jb   { left:auto; right:8px; bottom:8px; top:auto; width:172px; transform:none; }
+    #jb   { left:auto; right:8px; bottom:8px; top:auto; width:218px; transform:none; }
     #chat, #jb {
       background:rgba(9,14,20,.55);
       -webkit-backdrop-filter:blur(7px); backdrop-filter:blur(7px);
@@ -175,9 +175,9 @@
     #chat-in { padding:8px 10px; }
     #chat .jb-head { padding:8px 11px; font-size:11px; }
 
-    #jb .jb-head { cursor:default; font-size:9.5px; padding:6px 9px; letter-spacing:.18em; }
-    #jb-list { max-height:66px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
-    #jb-list li { padding:5px 9px 5px 10px; font-size:10px; }
+    #jb .jb-head { cursor:default; font-size:10.5px; padding:7px 10px; letter-spacing:.2em; }
+    #jb-list { max-height:74px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+    #jb-list li { padding:5px 10px 5px 11px; font-size:11.5px; letter-spacing:0; }
     .jb-note { display:none; }
     .jb-ctrls { gap:4px; padding:6px 8px; background:rgba(6,10,15,.45); }
     .jb-ctrls button { min-width:24px; padding:5px 0; font-size:9.5px; }
@@ -1651,7 +1651,7 @@ const HOLO_FRAG = `
   uniform sampler2D uMap;
   uniform vec3 uKey, uTint;
   uniform float uTol, uSoft, uTime, uOpacity, uFlicker, uFade, uSolid, uAlphaOnly;
-  uniform float uFx, uGain, uGamma;
+  uniform float uFx, uGain, uGamma, uRim;
   uniform vec2 uParallax;
   varying vec2 vUv;
 
@@ -1685,7 +1685,7 @@ const HOLO_FRAG = `
 
     float rim = abs(a - keyed(uv + vec2(0.007, 0.0)))
               + abs(a - keyed(uv + vec2(0.0, 0.007)));
-    col += uTint * clamp(rim, 0.0, 1.0) * 0.45;                     // edge light, always on
+    col += uTint * clamp(rim, 0.0, 1.0) * uRim;                     // edge light
     col *= 0.88 + 0.12 * round;                                     // gentle curve shading
     col *= mix(1.0, 0.96 + 0.04 * sin(vUv.y * 430.0 - uTime * 4.5), uFx);
     float sweep = smoothstep(0.05, 0.0, abs(vUv.y - fract(uTime * 0.17)));
@@ -1721,6 +1721,7 @@ function createHologram(opt) {
     uFx:       { value: opt.fx === undefined ? 1 : opt.fx },
     uGain:     { value: opt.gain === undefined ? 1.08 : opt.gain },
     uGamma:    { value: opt.gamma === undefined ? 1 : opt.gamma },
+    uRim:      { value: opt.rim === undefined ? 0.45 : opt.rim },
     uParallax: { value: new THREE.Vector2() },
     uTint:     { value: new THREE.Vector3().fromArray(TINT) }
   };
@@ -1962,7 +1963,7 @@ const BARTENDER = createHologram({
 // bench centre works out to x 7.10, backrest at z -5.90
 const PATRON = createHologram({
   src: ['strider.png', 'strider.jpg'],
-  height: 1.55,            // bottom of the image to the top of his head
+  height: 1.47,            // bottom of the image to the top of his head
   base: 0.52,              // sitting on the cushion
   pos: [7.12, -5.66],
   facing: 0,               // fixed, looking straight out of the booth
@@ -1972,7 +1973,10 @@ const PATRON = createHologram({
   solid: true,
   // gain and gamma were propping up a murky jpg. A clean png needs no help,
   // so these dim it back down instead of lifting it.
-  gain: 0.90, gamma: 1.06,
+  gain: 0.72, gamma: 1.08,
+  // The rim light traces wherever alpha changes. On a hand-cut png that edge is
+  // razor sharp, so it came out as a white outline rather than a soft glow.
+  rim: 0,
   fx: 1.0,                 // scanlines, sweep, glitch bands and flicker all back
   fade: 0,                 // still no dissolve across his lap
   pool: false, lamp: false,

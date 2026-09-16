@@ -1520,12 +1520,13 @@ function setNDC(cx, cy) {
   mouseNDC.set((cx - r.left) / r.width * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
 }
 canvas.addEventListener('mousedown', e => {
-  e.preventDefault();                 // no native image/text drag mid-look
+  e.preventDefault(); bump();                 // no native image/text drag mid-look
   dragging = true; slip = 0;
   lastX = downX = e.clientX; lastY = downY = e.clientY;
   setCursor('grabbing');
 });
 addEventListener('mousemove', e => {
+  bump();
   setNDC(e.clientX, e.clientY);
   lastPX = e.clientX; lastPY = e.clientY;
   if (!dragging) return;
@@ -1553,7 +1554,7 @@ canvas.addEventListener('click', e => {
 });
 
 canvas.addEventListener('wheel', e => {
-  e.preventDefault();
+  e.preventDefault(); bump();
   let d = e.deltaY;
   if (e.deltaMode === 1) d *= 16;
   else if (e.deltaMode === 2) d *= 400;
@@ -1571,6 +1572,7 @@ const spread = e => Math.hypot(
 );
 const midY = e => (e.touches[0].clientY + e.touches[1].clientY) / 2;
 canvas.addEventListener('touchstart', e => {
+  bump();
   if (!started) { enter(); return; }
   if (e.touches.length >= 2) {
     pinching = true; lookId = null;
@@ -1581,6 +1583,7 @@ canvas.addEventListener('touchstart', e => {
   lookId = t.identifier; lastX = downX = t.clientX; lastY = downY = t.clientY; slip = 0;
 }, { passive: true });
 canvas.addEventListener('touchmove', e => {
+  bump();
   if (pinching && e.touches.length >= 2) {
     // spread/pinch nudges you a step; holding the pair up or down keeps you walking
     const d = spread(e);
@@ -1619,6 +1622,7 @@ canvas.addEventListener('touchend', e => {
 
 // ---- keys: just the two shortcuts --------------------------------------
 addEventListener('keydown', e => {
+  bump();
   const typing = /^(INPUT|TEXTAREA)$/.test((document.activeElement || {}).tagName || '');
   if (e.code === 'Escape') { closePanel(); closeExit(); closeChat(); return; }
   if (typing) return;
@@ -2646,6 +2650,14 @@ document.getElementById('exit-go').addEventListener('click', () => {
 // ---------------------------------------------------------------- loop
 const velocity = new THREE.Vector3();
 const clock = new THREE.Clock();
+// Nothing on screen needs 60fps while you stand still, but a drag does - your
+// eye judges motion it controls far more harshly than motion it watches. So run
+// flat out while anything is happening and ease off two seconds after it stops.
+const IDLE_AFTER = 2.0;              // seconds of stillness before easing off
+const IDLE_FPS   = 30;
+let idleFor = 0, lastDraw = 0;
+const bump = () => { idleFor = 0; };  // any input wakes it immediately
+
 const statsBox = document.getElementById('stats');
 let statsOn = false, statsTick = 0, frames = 0;
 let lightCount = 0;
@@ -2657,6 +2669,13 @@ let hovering = false;
 
 function animate() {
   requestAnimationFrame(animate);
+
+  // Return before touching the clock, so the skipped time simply lands in the
+  // next delta and everything keeps moving at the right speed.
+  const now = performance.now();
+  if (idleFor > IDLE_AFTER && now - lastDraw < 1000 / IDLE_FPS) return;
+  lastDraw = now;
+
   const dt = Math.min(clock.getDelta(), 0.05);
   elapsed += dt;
 
@@ -2736,6 +2755,10 @@ function animate() {
   camera.rotation.set(pitch, yaw, 0);   // YXZ order, so roll stays at zero
   renderer.render(scene, camera);
 
+  const busy = dragging || pinching || f || s || turn
+            || velocity.lengthSq() > 1e-5 || Math.abs(scrollStep) > 0.002;
+  idleFor = busy ? 0 : idleFor + dt;
+
   // press P for the actual numbers rather than an estimate
   frames++;
   statsTick += dt;
@@ -2748,6 +2771,7 @@ function animate() {
       'geometries ' + m.geometries + '\n' +
       'textures   ' + m.textures + '\n' +
       'lights     ' + lightCount + '\n' +
+      'mode       ' + (idleFor > IDLE_AFTER ? 'idle ' + IDLE_FPS + 'fps' : 'active') + '\n' +
       'pixelRatio ' + pixelRatio.toFixed(2) + '  (' +
         Math.round(innerWidth * pixelRatio) + 'x' + Math.round(innerHeight * pixelRatio) + ')';
     statsTick = 0; frames = 0;

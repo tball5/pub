@@ -101,33 +101,6 @@
   #exit-go:hover { border-color:#ff3b3b; color:#fff; }
   #exit-stay:hover { border-color:#8b7a63; }
   #exit-go[disabled] { opacity:.45; cursor:not-allowed; }
-  /* On a phone the panels took the whole screen. Shrink them, let the room
-     show through, and keep the chat and the jukebox at opposite ends. */
-  @media (pointer: coarse), (max-width: 700px) {
-    #chat { left:8px; right:8px; top:8px; bottom:auto; width:auto; transform:none; }
-    #jb {
-      left:auto; right:8px; bottom:8px; top:auto; width:186px; transform:none;
-    }
-    #jb .jb-head { cursor:default; font-size:10px; padding:7px 9px; }
-    #jb-list { max-height:78px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
-    #jb-list li { padding:5px 9px 5px 11px; font-size:10.5px; }
-    .jb-note { display:none; }
-    .jb-ctrls { gap:4px; padding:7px 9px; }
-    .jb-ctrls button { min-width:26px; padding:6px 0; font-size:10px; }
-    #chat, #jb {
-      background:rgba(9,14,20,.55);
-      -webkit-backdrop-filter:blur(7px); backdrop-filter:blur(7px);
-      border-color:rgba(70,110,145,.55);
-    }
-    #chat-log { height:120px; }
-    #chat-log .msg { font-size:12px; }
-    #jb-list { max-height:128px; }
-    .jb-head { padding:8px 11px; font-size:11px; }
-    .chat-row, .jb-ctrls { padding:8px 10px; background:rgba(6,10,15,.45); }
-    #chat-in { padding:8px 10px; }
-    .jb-note { margin:6px 11px; }
-  }
-
   #jb, #chat {
     position:fixed; z-index:22; display:none; overflow:hidden;
     background:linear-gradient(160deg, #0d1219 0%, #070a0f 60%, #05080c 100%);
@@ -180,6 +153,30 @@
   }
   .jb-ctrls button:hover { border-color:#2ee6ff; color:#fff; box-shadow:0 0 12px rgba(46,230,255,.3); }
   .jb-ctrls input { flex:1 1 auto; min-width:0; accent-color:#2ee6ff; }
+  /* Kept last on purpose: these rules have the same specificity as the desktop
+     ones above, so they only win by coming after them. That ordering is exactly
+     why the jukebox was still sitting mid-screen on phones. */
+  @media (pointer: coarse), (max-width: 700px) {
+    #chat { left:8px; right:8px; top:8px; bottom:auto; width:auto; transform:none; }
+    #jb   { left:auto; right:8px; bottom:8px; top:auto; width:172px; transform:none; }
+    #chat, #jb {
+      background:rgba(9,14,20,.55);
+      -webkit-backdrop-filter:blur(7px); backdrop-filter:blur(7px);
+      border-color:rgba(70,110,145,.55);
+    }
+    #chat-log { height:120px; }
+    #chat-log .msg { font-size:12px; }
+    .chat-row { padding:8px 10px; background:rgba(6,10,15,.45); }
+    #chat-in { padding:8px 10px; }
+    #chat .jb-head { padding:8px 11px; font-size:11px; }
+
+    #jb .jb-head { cursor:default; font-size:9.5px; padding:6px 9px; letter-spacing:.18em; }
+    #jb-list { max-height:66px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+    #jb-list li { padding:5px 9px 5px 10px; font-size:10px; }
+    .jb-note { display:none; }
+    .jb-ctrls { gap:4px; padding:6px 8px; background:rgba(6,10,15,.45); }
+    .jb-ctrls button { min-width:24px; padding:5px 0; font-size:9.5px; }
+  }
 </style>
 </head>
 <body>
@@ -815,14 +812,14 @@ const JUKEBOX = (() => {
 
   // projector beam rising off the crown
   const beam = new THREE.Mesh(
-    new THREE.ConeGeometry(0.5, 0.85, 22, 1, true),
+    new THREE.ConeGeometry(0.62, 1.02, 24, 1, true),
     new THREE.MeshBasicMaterial({
       color: 0x7fd4ff, transparent: true, opacity: 0.07,
       blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
     })
   );
   beam.rotation.x = Math.PI;          // apex down, spreading upward
-  beam.position.set(0, 1.72, 0.05);
+  beam.position.set(0, 1.80, 0.05);
   g.add(beam);
 
   // the hologram itself
@@ -831,24 +828,24 @@ const JUKEBOX = (() => {
   const hctx = holo.getContext('2d');
   const holoTex = new THREE.CanvasTexture(holo);
   const plate = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.96, 0.48),
+    new THREE.PlaneGeometry(1.16, 0.58),
     new THREE.MeshBasicMaterial({
       map: holoTex, transparent: true, opacity: 0.92,
       blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
     })
   );
-  plate.position.set(0, 1.86, 0.18);
+  plate.position.set(0, 1.95, 0.18);
   g.add(plate);
 
   // spinning record ring under the plate
   const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(0.26, 0.008, 6, 44),
+    new THREE.TorusGeometry(0.31, 0.009, 6, 44),
     new THREE.MeshBasicMaterial({
       color: 0x9fe0ff, transparent: true, opacity: 0.75,
       blending: THREE.AdditiveBlending, depthWrite: false
     })
   );
-  ring.position.set(0, 1.86, 0.17);
+  ring.position.set(0, 1.95, 0.17);
   g.add(ring);
   const ring2 = ring.clone();
   ring2.scale.setScalar(0.62);
@@ -937,7 +934,7 @@ const JUKEBOX = (() => {
     update(elapsed, dt) {
       ring.rotation.z -= dt * 1.6;
       ring2.rotation.z += dt * 2.4;
-      plate.position.y = 1.86 + Math.sin(elapsed * 1.3) * 0.014;
+      plate.position.y = 1.95 + Math.sin(elapsed * 1.3) * 0.016;
       plate.material.opacity = 0.86 + Math.sin(elapsed * 9) * 0.06;   // faint flicker
       acc += dt;
       if (acc > 1 / 12) { drawFace(elapsed); drawHolo(elapsed); acc = 0; }
@@ -1783,6 +1780,17 @@ function createHologram(opt) {
     x.drawImage(img, 0, 0, w, h);
     const id = x.getImageData(0, 0, w, h), px = id.data;
 
+    // If the file already carries transparency (a PNG cut out in an editor),
+    // trust it and skip the fill entirely - nothing guesses better than a
+    // hand-made alpha channel.
+    let clear = 0;
+    for (let k = 0; k < w * h; k += 7) if (px[k * 4 + 3] < 250) clear++;
+    if (clear > (w * h / 7) * 0.05) {
+      featherAlpha(px, w, h);
+      x.putImageData(id, 0, 0);
+      return c;
+    }
+
     let sr = 0, sg = 0, sb = 0, n = 0;
     const seed = i => { sr += px[i * 4]; sg += px[i * 4 + 1]; sb += px[i * 4 + 2]; n++; };
     for (let i = 0; i < w; i++) { seed(i); seed((h - 1) * w + i); }
@@ -1818,15 +1826,19 @@ function createHologram(opt) {
       tol *= 0.5;                                // it bled through - tighten and retry
     }
     for (let k = 0; k < w * h; k++) if (mask[k] === 1) px[k * 4 + 3] = 0;
-    // one pass of alpha blur so the silhouette isn't a jagged stair-step
+    featherAlpha(px, w, h);
+    x.putImageData(id, 0, 0);
+    return c;
+  }
+
+  // one pass of alpha blur so the silhouette isn't a jagged stair-step
+  function featherAlpha(px, w, h) {
     const a0 = new Uint8ClampedArray(w * h);
     for (let i = 0; i < w * h; i++) a0[i] = px[i * 4 + 3];
     for (let y = 1; y < h - 1; y++) for (let xx = 1; xx < w - 1; xx++) {
       const k = y * w + xx;
       px[k * 4 + 3] = (a0[k] * 4 + a0[k - 1] + a0[k + 1] + a0[k - w] + a0[k + w]) / 8;
     }
-    x.putImageData(id, 0, 0);
-    return c;
   }
 
   function autoKey(img) {
@@ -2050,20 +2062,20 @@ function makeAvatar(color, opt) {
    with a black dress and hair. She works the room, stopping at every booth
    that has someone in it to see whether they need anything.
    ---------------------------------------------------------------------- */
-const SRV_HIP = 0.86;                       // shorter than the regulars' 0.92
+const SRV_HIP = 0.90;                       // still shorter than the regulars' 0.92
 const SRV = {
   // profile spun around the vertical axis: hip -> pinched waist -> bust -> shoulder
   torso: new THREE.LatheGeometry([
-    [0.152, 0.000], [0.172, 0.070], [0.110, 0.150], [0.076, 0.215],
-    [0.126, 0.278], [0.170, 0.325], [0.150, 0.368], [0.094, 0.430],
-    [0.074, 0.492], [0.048, 0.550]
+    [0.152, 0.000], [0.172, 0.075], [0.108, 0.168], [0.073, 0.252],
+    [0.122, 0.322], [0.170, 0.370], [0.150, 0.412], [0.094, 0.474],
+    [0.074, 0.536], [0.048, 0.594]
   ].map(([r, y]) => new THREE.Vector2(r, y)), 16),
   skirt: new THREE.LatheGeometry([
     [0.168, 0.00], [0.190, -0.10], [0.214, -0.20], [0.220, -0.24]
   ].map(([r, y]) => new THREE.Vector2(r, y)), 16),
   seat:  new THREE.SphereGeometry(0.115, 12, 10),
-  thigh: new THREE.CylinderGeometry(0.050, 0.040, 0.44, 8).translate(0, -0.22, 0),
-  shin:  new THREE.CylinderGeometry(0.040, 0.030, 0.42, 8).translate(0, -0.21, 0),
+  thigh: new THREE.CylinderGeometry(0.050, 0.040, 0.46, 8).translate(0, -0.23, 0),
+  shin:  new THREE.CylinderGeometry(0.040, 0.030, 0.44, 8).translate(0, -0.22, 0),
   arm:   new THREE.CylinderGeometry(0.031, 0.025, 0.54, 6).translate(0, -0.27, 0),
   head:  new THREE.SphereGeometry(0.100, 14, 12),
   hair:  new THREE.SphereGeometry(0.121, 14, 12, 0, Math.PI * 2, 0, Math.PI * 0.66),
@@ -2101,7 +2113,7 @@ function makeServer(servedBooths, servedTables) {
   const hipL = pivot(-0.082, SRV_HIP), hipR = pivot(0.082, SRV_HIP);
   mesh(SRV.thigh, SRV_SILVER, 0, hipL); mesh(SRV.thigh, SRV_SILVER, 0, hipR);
   const kneeL = new THREE.Group(), kneeR = new THREE.Group();
-  kneeL.position.y = -0.44; kneeR.position.y = -0.44;
+  kneeL.position.y = -0.46; kneeR.position.y = -0.46;
   hipL.add(kneeL); hipR.add(kneeR);
   mesh(SRV.shin, SRV_SILVER, 0, kneeL); mesh(SRV.shin, SRV_SILVER, 0, kneeR);
 
@@ -2112,13 +2124,13 @@ function makeServer(servedBooths, servedTables) {
   seat.scale.set(1.18, 0.74, 0.92);
   mesh(SRV.skirt, SRV_BLACK, SRV_HIP + 0.02);
 
-  const armL = pivot(-0.158, SRV_HIP + 0.482), armR = pivot(0.158, SRV_HIP + 0.482);
+  const armL = pivot(-0.158, SRV_HIP + 0.522), armR = pivot(0.158, SRV_HIP + 0.522);
   mesh(SRV.arm, SRV_SILVER, 0, armL); mesh(SRV.arm, SRV_SILVER, 0, armR);
 
-  const head = mesh(SRV.head, SRV_SILVER, SRV_HIP + 0.675);
-  mesh(SRV.hair, SRV_BLACK, SRV_HIP + 0.686);
+  const head = mesh(SRV.head, SRV_SILVER, SRV_HIP + 0.716);
+  mesh(SRV.hair, SRV_BLACK, SRV_HIP + 0.727);
   const tail = new THREE.Group();
-  tail.position.set(0, SRV_HIP + 0.72, -0.088);
+  tail.position.set(0, SRV_HIP + 0.762, -0.088);
   tail.rotation.x = 0.35;
   mesh(SRV.tail, SRV_BLACK, 0, tail);
   body.add(tail);
@@ -2219,7 +2231,7 @@ function updateServer(av, dt, t) {
       av.faceTo = av.wps[reached.idx].face;
     }
   }
-  av.head.position.y = SRV_HIP + 0.675 + Math.sin(t * 2.1) * 0.007;
+  av.head.position.y = SRV_HIP + 0.716 + Math.sin(t * 2.1) * 0.007;
 }
 
 function buildAvatars() {

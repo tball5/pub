@@ -34,78 +34,6 @@
     padding:9px 12px; background:rgba(6,10,15,.82); border:1px solid #27394c; color:#9fe0ff;
     font:500 11px/1.6 ui-monospace, Menlo, Consolas, monospace; white-space:pre;
   }
-  #prompt {
-    position:fixed; display:none; pointer-events:none; padding:6px 14px; border-radius:3px;
-    background:rgba(8,8,12,.85); border:1px solid #ff3b3b; color:#ffe6b0;
-    font:700 12px/1 Arial, Helvetica, sans-serif; letter-spacing:.14em; z-index:15;
-  }
-  #chat { left:22px; top:50%; transform:translateY(-50%); width:344px; }
-  #chat-log {
-    position:relative; height:288px; overflow-y:auto; padding:13px 14px 6px;
-    display:flex; flex-direction:column; gap:9px;
-    background-image:repeating-linear-gradient(0deg, rgba(120,190,255,.035) 0 1px, transparent 1px 3px);
-  }
-  .chat-title { letter-spacing:.14em; font-size:12px; }
-  .msg-wrap { display:flex; flex-direction:column; max-width:88%; }
-  .msg-wrap.ejak { align-self:flex-start; align-items:flex-start; }
-  .msg-wrap.you  { align-self:flex-end;   align-items:flex-end; }
-  .msg-wrap.note { align-self:center;     align-items:center; max-width:100%; }
-  .msg-label {
-    margin:0 2px 3px; font:700 9px/1 ui-monospace, Menlo, monospace;
-    letter-spacing:.2em; color:#587a94;
-  }
-  .msg-wrap.ejak .msg-label { color:#2ee6ff; }
-  .msg {
-    padding:8px 11px; white-space:pre-wrap; word-wrap:break-word;
-    font-size:12.5px; line-height:1.55;
-    clip-path:polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
-  }
-  .msg.you  { background:#16232f; color:#cfe2f4; border-right:2px solid #2b6cff; }
-  .msg.ejak { background:rgba(46,230,255,.08); color:#dff2ff; border-left:2px solid #2ee6ff; }
-  .msg.pending { opacity:.5; font-style:italic; }
-  .msg.err { background:rgba(255,59,59,.12); color:#ffc9c9; border-left-color:#ff3b3b; }
-  .msg.note {
-    background:none; color:#5b7a92; text-align:center;
-    font:600 10px/1.6 ui-monospace, Menlo, monospace; letter-spacing:.16em; text-transform:uppercase;
-  }
-  .chat-row {
-    display:flex; gap:8px; padding:11px 14px; border-top:1px solid #1a2836;
-    background:rgba(8,14,20,.6);
-  }
-  #chat-in {
-    flex:1; min-width:0; padding:9px 11px; color:#e2eef8;
-    background:#0b131b; border:1px solid #27394c;
-    font:400 12.5px "Helvetica Neue", Arial, sans-serif;
-    clip-path:polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
-  }
-  #chat-in::placeholder { color:#4a6072; }
-  #chat-in:focus { outline:none; border-color:#2ee6ff; box-shadow:0 0 14px rgba(46,230,255,.22); }
-  #chat-send {
-    padding:9px 15px; cursor:pointer; color:#bcd4e8; background:#111a24; border:1px solid #27394c;
-    font:800 11px "Arial Narrow", Arial, sans-serif; letter-spacing:.16em; text-transform:uppercase;
-    clip-path:polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
-  }
-  #chat-send:hover { border-color:#2ee6ff; color:#fff; box-shadow:0 0 12px rgba(46,230,255,.3); }
-  #exit {
-    position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:25;
-    display:none; width:320px; padding:22px 24px 20px; text-align:center;
-    background:rgba(10,8,6,.97); color:#e9e2d4; border:1px solid #6b3a1c; border-radius:6px;
-    box-shadow:0 0 0 1px rgba(255,59,59,.35), 0 0 40px rgba(0,0,0,.6);
-    font:400 13px/1.5 Arial, Helvetica, sans-serif;
-  }
-  .exit-q {
-    margin:0 0 4px; font:800 22px/1.2 "Arial Black", Impact, sans-serif;
-    letter-spacing:.06em; color:#fff;
-  }
-  .exit-sub { margin:0 0 16px; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#8b7a63; }
-  .exit-row { display:flex; gap:10px; }
-  .exit-row button {
-    flex:1; padding:10px 0; cursor:pointer; border-radius:3px; font:700 12px/1 Arial, sans-serif;
-    letter-spacing:.08em; background:#1d140b; border:1px solid #6b3a1c; color:#e9e2d4;
-  }
-  #exit-go:hover { border-color:#ff3b3b; color:#fff; }
-  #exit-stay:hover { border-color:#8b7a63; }
-  #exit-go[disabled] { opacity:.45; cursor:not-allowed; }
   #jb, #chat {
     position:fixed; z-index:22; display:none; overflow:hidden;
     background:linear-gradient(160deg, #0d1219 0%, #070a0f 60%, #05080c 100%);
@@ -163,7 +91,10 @@
      why the jukebox was still sitting mid-screen on phones. */
   @media (pointer: coarse), (max-width: 700px) {
     #chat { left:8px; right:8px; top:8px; bottom:auto; width:auto; transform:none; }
-    #jb   { left:auto; right:8px; bottom:8px; top:auto; width:218px; transform:none; }
+    #jb {
+      left:8px; right:auto; bottom:8px; top:auto; transform:none;
+      width:296px; max-width:calc(100% - 16px);
+    }
     #chat, #jb {
       background:rgba(9,14,20,.55);
       -webkit-backdrop-filter:blur(7px); backdrop-filter:blur(7px);
@@ -176,8 +107,8 @@
     #chat .jb-head { padding:8px 11px; font-size:11px; }
 
     #jb .jb-head { cursor:default; font-size:10.5px; padding:7px 10px; letter-spacing:.2em; }
-    #jb-list { max-height:74px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
-    #jb-list li { padding:5px 10px 5px 11px; font-size:11.5px; letter-spacing:0; }
+    #jb-list { max-height:92px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+    #jb-list li { padding:6px 11px 6px 12px; font-size:12px; letter-spacing:0; }
     .jb-note { display:none; }
     .jb-ctrls { gap:4px; padding:6px 8px; background:rgba(6,10,15,.45); }
     .jb-ctrls button { min-width:24px; padding:5px 0; font-size:9.5px; }
@@ -190,7 +121,6 @@
   <p>every game &middot; every night</p>
 </div></div>
 <div id="hint">esc to release the mouse</div>
-<div id="prompt">JUKEBOX &mdash; click</div>
 <div id="stats"></div>
 
 <div id="chat">
@@ -884,7 +814,7 @@ const JUKEBOX = (() => {
     grd.addColorStop(1, 'rgba(168,85,247,0.3)');
     c.fillStyle = grd; c.fillRect(0, 0, w, 58);
     c.fillStyle = '#ffe6b0'; c.font = '800 30px "Arial Black", Impact, sans-serif';
-    c.textAlign = 'center'; c.fillText('SELECT-O-MATIC', w / 2, 40);
+    c.textAlign = 'center'; c.fillText('JUKEBOX', w / 2, 40);
     c.textAlign = 'left';
     const real = PLAYER.names();
     const list = real.length ? real : TRACKS;
@@ -1478,7 +1408,7 @@ measureLook();
 
 let started = false, rainLive = false;
 let jbOpen = false, chatOpen = false, exitOpen = false;
-let panelOpen = false;      // any panel showing - used to mute hover prompts
+let panelOpen = false;      // true when any panel is showing
 const syncPanels = () => { panelOpen = jbOpen || chatOpen || exitOpen; };
 let dragging = false, lastX = 0, lastY = 0, downX = 0, downY = 0, slip = 0;
 let lastPX = 0, lastPY = 0;         // cursor position, for the hover label
@@ -1973,7 +1903,7 @@ const PATRON = createHologram({
   solid: true,
   // gain and gamma were propping up a murky jpg. A clean png needs no help,
   // so these dim it back down instead of lifting it.
-  gain: 0.72, gamma: 1.08,
+  gain: 0.60, gamma: 1.10,
   // The rim light traces wherever alpha changes. On a hand-cut png that edge is
   // razor sharp, so it came out as a white outline rather than a soft glow.
   rim: 0,
@@ -2418,14 +2348,12 @@ fetch(PLAYLIST_URL, { cache: 'no-cache' })
 
 // ---------------------------------------------------------------- jukebox UI
 const jb = document.getElementById('jb');
-const prompt = document.getElementById('prompt');
 const raycaster = new THREE.Raycaster();
 
 function openPanel() {
   if (jbOpen) return;
   jbOpen = true; syncPanels();
   jb.style.display = 'block';
-  prompt.style.display = 'none';
   dragging = false;
   PLAYER.render();
 }
@@ -2526,7 +2454,6 @@ function openChat() {
   if (chatOpen) return;
   chatOpen = true; syncPanels();
   chatBox.style.display = 'block';
-  prompt.style.display = 'none';
   dragging = false;
   if (!chatGreeted) {
     chatGreeted = true;
@@ -2599,7 +2526,6 @@ function openExit() {
   if (exitOpen) return;
   exitOpen = true; syncPanels();
   exitBox.style.display = 'block';
-  prompt.style.display = 'none';
   dragging = false;
   document.querySelector('#exit .exit-q').textContent = EXIT_LABEL;
   const go = document.getElementById('exit-go');
@@ -2666,23 +2592,11 @@ function animate() {
   PATRON.update(elapsed, dt);
   updateAvatars(dt, elapsed);
 
-  // hover test a few times a second rather than every frame
+  // No hover labels - the cursor turning into a pointer is enough of a cue.
   hoverTick += dt;
-  if (started && !panelOpen && !touch && hoverTick > 0.1) {
+  if (started && !exitOpen && !touch && hoverTick > 0.1) {
     hoverTick = 0;
-    const aim = dragging ? null : pickTarget();
-    if (aim !== hovering) {
-      hovering = aim;
-      prompt.style.display = aim ? 'block' : 'none';
-      if (aim) prompt.textContent = aim === 'door' ? 'LEAVE THE PUB'
-                                  : aim === 'ejak' ? 'TALK TO EJAK'
-                                  : 'JUKEBOX \u2014 click';
-    }
-    if (aim) {
-      prompt.style.left = (lastPX + 18) + 'px';
-      prompt.style.top  = (lastPY + 16) + 'px';
-    }
-    if (!dragging) setCursor(aim ? 'pointer' : 'grab');
+    if (!dragging) setCursor(pickTarget() ? 'pointer' : 'grab');
   }
 
   // screens only need ~12fps, which keeps the canvas work off the critical path

@@ -1954,8 +1954,8 @@ function createHologram(opt) {
 // finishes just under the video wall at 2.42
 const BARTENDER = createHologram({
   src: ['ejak.png', 'ejak.jpg'],
-  height: 1.28, base: 0.99, pos: [barX, -4.02],   // 95% size, nudged up, right against
-  clamp: Math.PI / 4,      // the back of the bar so he reads as close to you
+  height: 1.28, base: 0.99, pos: [barX, -4.07],   // 95% size, a couple of inches off
+  clamp: Math.PI / 4,      // the back of the bar, turning through 90 degrees
   fade: 0,                 // no dissolve at the hem - he stays solid to the bottom
   pool: false, lamp: false,
   placeholder: 'stand'
@@ -2096,6 +2096,28 @@ function makeAvatar(color, opt) {
    that has someone in it to see whether they need anything.
    ---------------------------------------------------------------------- */
 const SRV_HIP = 0.90;                       // still shorter than the regulars' 0.92
+
+// A lathe spins one profile all the way around, so any curve it makes appears
+// front AND back. This walks the finished vertices and pulls the rear ones in
+// across a band of heights, leaving the front profile untouched.
+function shapeFront(geo, yIn, yFull, yOut, yEnd, amount) {
+  const pos = geo.attributes.position;
+  const v = new THREE.Vector3();
+  const ss = THREE.MathUtils.smoothstep;
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const r = Math.hypot(v.x, v.z);
+    if (r < 1e-5) continue;
+    const band = ss(v.y, yIn, yFull) * (1 - ss(v.y, yOut, yEnd));
+    if (band <= 0) continue;
+    const back = 1 - ((v.z / r) * 0.5 + 0.5);   // 0 at the front, 1 at the back
+    const k = 1 - amount * band * back;
+    pos.setXYZ(i, v.x * k, v.y, v.z * k);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  return geo;
+}
 const SRV = {
   // profile spun around the vertical axis: hip -> pinched waist -> bust -> shoulder
   torso: new THREE.LatheGeometry([
@@ -2114,6 +2136,9 @@ const SRV = {
   hair:  new THREE.SphereGeometry(0.121, 14, 12, 0, Math.PI * 2, 0, Math.PI * 0.66),
   tail:  new THREE.CylinderGeometry(0.050, 0.019, 0.32, 8).translate(0, -0.16, 0)
 };
+// bust band runs roughly y 0.28 - 0.45 on her profile; the back comes in 42%
+shapeFront(SRV.torso, 0.265, 0.325, 0.420, 0.495, 0.42);
+
 const SRV_SILVER = holoMaterial('#e3ebf4', 0.52);
 const SRV_BLACK  = holoMaterial('#6d7889', 0.30);   // reads as black against the silver
 avMats.push(SRV_SILVER, SRV_BLACK);

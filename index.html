@@ -12,13 +12,14 @@
   canvas { display:block; -webkit-user-drag:none; touch-action:none; }
   #hud {
     position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    transition:opacity .55s ease; pointer-events:none;
     background:radial-gradient(ellipse at center, rgba(22,14,8,.74), rgba(6,4,3,.94));
-    cursor:pointer; color:#bfeaf5; text-align:center;
+    color:#bfeaf5; text-align:center;
     font:400 15px/1.7 "Helvetica Neue", Arial, sans-serif;
   }
   #hud .panel { max-width:34ch; }
   #hud h1 {
-    font-size:46px; letter-spacing:.14em; margin:0 0 .2em; font-weight:800;
+    font-size:38px; letter-spacing:.14em; margin:0 0 .2em; font-weight:800;
     font-family:"Arial Black", Impact, sans-serif; color:#f6faff;
     text-shadow:0 0 16px #ff3b3b, 0 0 44px rgba(43,108,255,.6);
   }
@@ -33,6 +34,48 @@
     background:rgba(8,8,12,.85); border:1px solid #ff3b3b; color:#ffe6b0;
     font:700 12px/1 Arial, Helvetica, sans-serif; letter-spacing:.14em; z-index:15;
   }
+  #chat { left:22px; top:50%; transform:translateY(-50%); width:344px; }
+  #chat-log {
+    position:relative; height:288px; overflow-y:auto; padding:13px 14px 6px;
+    display:flex; flex-direction:column; gap:9px;
+    background-image:repeating-linear-gradient(0deg, rgba(120,190,255,.035) 0 1px, transparent 1px 3px);
+  }
+  .msg {
+    max-width:86%; padding:8px 11px; white-space:pre-wrap; word-wrap:break-word;
+    font-size:12.5px; line-height:1.55;
+    clip-path:polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+  }
+  .msg.you {
+    align-self:flex-end; background:#16232f; color:#cfe2f4; border-right:2px solid #2b6cff;
+  }
+  .msg.ejak {
+    align-self:flex-start; background:rgba(46,230,255,.08); color:#dff2ff;
+    border-left:2px solid #2ee6ff;
+  }
+  .msg.pending { opacity:.5; font-style:italic; }
+  .msg.err { background:rgba(255,59,59,.12); color:#ffc9c9; border-left-color:#ff3b3b; }
+  .msg.note {
+    align-self:center; background:none; color:#5b7a92; max-width:100%; text-align:center;
+    font:600 10px/1.6 ui-monospace, Menlo, monospace; letter-spacing:.16em; text-transform:uppercase;
+  }
+  .chat-row {
+    display:flex; gap:8px; padding:11px 14px; border-top:1px solid #1a2836;
+    background:rgba(8,14,20,.6);
+  }
+  #chat-in {
+    flex:1; min-width:0; padding:9px 11px; color:#e2eef8;
+    background:#0b131b; border:1px solid #27394c;
+    font:400 12.5px "Helvetica Neue", Arial, sans-serif;
+    clip-path:polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
+  }
+  #chat-in::placeholder { color:#4a6072; }
+  #chat-in:focus { outline:none; border-color:#2ee6ff; box-shadow:0 0 14px rgba(46,230,255,.22); }
+  #chat-send {
+    padding:9px 15px; cursor:pointer; color:#bcd4e8; background:#111a24; border:1px solid #27394c;
+    font:800 11px "Arial Narrow", Arial, sans-serif; letter-spacing:.16em; text-transform:uppercase;
+    clip-path:polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
+  }
+  #chat-send:hover { border-color:#2ee6ff; color:#fff; box-shadow:0 0 12px rgba(46,230,255,.3); }
   #exit {
     position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:25;
     display:none; width:320px; padding:22px 24px 20px; text-align:center;
@@ -63,51 +106,77 @@
     border-radius:50%; background:rgba(230,240,255,.5); border:2px solid rgba(255,255,255,.5);
     box-shadow:0 0 18px rgba(120,190,255,.45);
   }
-  #jb {
-    position:fixed; right:22px; top:50%; transform:translateY(-50%); width:310px;
-    display:none; z-index:20; background:rgba(10,8,6,.96); color:#e9e2d4;
-    border:1px solid #6b3a1c; border-radius:6px; overflow:hidden;
-    box-shadow:0 0 0 1px rgba(255,59,59,.35), 0 0 34px rgba(43,108,255,.25);
-    font:400 13px/1.5 Arial, Helvetica, sans-serif;
+  #jb, #chat {
+    position:fixed; z-index:22; display:none; overflow:hidden;
+    background:linear-gradient(160deg, #0d1219 0%, #070a0f 60%, #05080c 100%);
+    border:1px solid #223244; color:#d6e4f2;
+    box-shadow:0 0 0 1px rgba(0,0,0,.6), 0 0 30px rgba(0,0,0,.55),
+               inset 0 0 40px rgba(20,60,90,.18);
+    clip-path:polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
+    font:400 13px/1.5 "Helvetica Neue", Arial, sans-serif;
   }
+  #jb { right:22px; top:50%; transform:translateY(-50%); width:318px; }
   .jb-head {
-    display:flex; align-items:center; justify-content:space-between;
-    padding:10px 12px; background:linear-gradient(90deg, rgba(255,59,59,.35), rgba(43,108,255,.3));
-    font:800 15px/1 "Arial Black", Impact, sans-serif; letter-spacing:.14em; color:#fff;
+    position:relative; display:flex; align-items:center; justify-content:space-between;
+    padding:11px 14px 10px; cursor:move; touch-action:none;
+    background:linear-gradient(90deg, rgba(255,59,59,.22), rgba(43,108,255,.16) 55%, transparent);
+    font:800 13px/1 "Arial Narrow", Arial, sans-serif; letter-spacing:.26em;
+    text-transform:uppercase; color:#eaf4ff;
   }
-  .jb-head { cursor:move; touch-action:none; }
-  .jb-head button { background:none; border:0; color:#ffd7d7; font-size:15px; cursor:pointer; }
+  .jb-head::after {
+    content:''; position:absolute; left:0; right:0; bottom:0; height:2px;
+    background:linear-gradient(90deg, #ff3b3b, #2ee6ff 60%, transparent);
+  }
+  .jb-head button { background:none; border:0; color:#8fb4cf; font-size:14px; cursor:pointer; }
+  .jb-head button:hover { color:#fff; }
   .jb-note {
-    margin:10px 12px; font-size:11px; color:#8b7a63;
-    letter-spacing:.06em; text-transform:uppercase;
+    margin:9px 14px; font:600 10px/1.5 ui-monospace, Menlo, monospace;
+    letter-spacing:.16em; text-transform:uppercase; color:#5b7a92;
   }
-  #jb-list { list-style:none; margin:0; padding:0 0 4px; max-height:212px; overflow:auto; }
+  #jb-list { list-style:none; margin:0; padding:2px 0 4px; max-height:206px; overflow:auto; }
   #jb-list li {
-    padding:7px 14px; cursor:pointer; color:#c9bda8; border-left:3px solid transparent;
+    position:relative; padding:8px 14px 8px 16px; cursor:pointer; color:#9fb6c9;
+    font:500 12px/1.4 ui-monospace, Menlo, monospace; letter-spacing:.04em;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    border-left:2px solid transparent;
   }
-  #jb-list li:hover { background:rgba(255,255,255,.05); }
-  #jb-list li.on { color:#ffb347; border-left-color:#ff3b3b; background:rgba(255,59,59,.09); }
-  #jb-list li.jb-empty { color:#6b5c45; cursor:default; font-style:italic; }
-  #jb-list li.bad { color:#7a4a4a; text-decoration:line-through; }
-  .jb-ctrls { display:flex; align-items:center; gap:8px; padding:10px 12px; border-top:1px solid #3a2616; }
+  #jb-list li:hover { background:rgba(46,230,255,.06); color:#d6e4f2; }
+  #jb-list li.on {
+    color:#2ee6ff; border-left-color:#2ee6ff; background:rgba(46,230,255,.1);
+    text-shadow:0 0 12px rgba(46,230,255,.5);
+  }
+  #jb-list li.jb-empty { color:#4a6072; cursor:default; border-left-color:transparent; }
+  #jb-list li.bad { color:#7a4a54; text-decoration:line-through; }
+  .jb-ctrls {
+    display:flex; align-items:center; gap:6px; padding:11px 14px;
+    border-top:1px solid #1a2836; background:rgba(8,14,20,.6);
+  }
   .jb-ctrls button {
-    flex:0 0 auto; min-width:42px; padding:7px 0; cursor:pointer; color:#e9e2d4;
-    background:#1d140b; border:1px solid #6b3a1c; border-radius:3px; font-size:12px;
+    flex:0 0 auto; min-width:40px; padding:8px 0; cursor:pointer; color:#bcd4e8;
+    background:#111a24; border:1px solid #27394c; font-size:11px; letter-spacing:.1em;
+    clip-path:polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
   }
-  .jb-ctrls button:hover { border-color:#ff3b3b; color:#fff; }
-  .jb-ctrls input { flex:1 1 auto; min-width:0; accent-color:#ff3b3b; }
+  .jb-ctrls button:hover { border-color:#2ee6ff; color:#fff; box-shadow:0 0 12px rgba(46,230,255,.3); }
+  .jb-ctrls input { flex:1 1 auto; min-width:0; accent-color:#2ee6ff; }
 </style>
 </head>
 <body>
 <div id="hud"><div class="panel">
-  <h1>THE PUB</h1>
+  <h1>WELCOME TO THE PUB</h1>
   <p>every game &middot; every night</p>
-  <p class="keys">click to step inside<br>drag to look &middot; scroll to walk<br>click the jukebox for the music &middot; R runs the rain</p>
 </div></div>
 <div id="hint">esc to release the mouse</div>
 <div id="prompt">JUKEBOX &mdash; click</div>
 <div id="stick"><div id="knob"></div></div>
+
+<div id="chat">
+  <div class="jb-head"><span>EJAK</span><button id="chat-close" title="close">&#10005;</button></div>
+  <div id="chat-log"></div>
+  <div class="chat-row">
+    <input id="chat-in" type="text" placeholder="say something&hellip;" autocomplete="off">
+    <button id="chat-send">Send</button>
+  </div>
+</div>
 
 <div id="exit">
   <p class="exit-q">Leave The Pub?</p>
@@ -1383,17 +1452,34 @@ const mouseNDC = new THREE.Vector2(0, 0);
 const move = { f: 0, s: 0 };        // forward / strafe, -1..1, from the thumbstick
 let scrollStep = 0;
 
+// A browser won't let audio play until the page has seen a gesture, so the
+// first input unlocks the audio context. That is ALL it does - nothing plays
+// until someone works the jukebox.
+function armAudio() {
+  const go = () => {
+    if (listener.context.state === 'suspended') listener.context.resume();
+    ['pointerdown', 'keydown', 'touchstart'].forEach(ev => removeEventListener(ev, go));
+  };
+  ['pointerdown', 'keydown', 'touchstart'].forEach(ev => addEventListener(ev, go, { passive: true }));
+}
+
 function enter() {
   if (started) return;
   started = true;
-  hud.style.display = 'none';
-  if (listener.context.state === 'suspended') listener.context.resume();
-  if (AUTOPLAY && PLAYER.count() && PLAYER.isIdle()) PLAYER.toggle();
+  hud.style.opacity = '0';
+  setTimeout(() => { hud.style.display = 'none'; }, 600);
   hint.textContent = touch ? 'thumbstick to walk, swipe to look'
-                           : 'drag to look, scroll to walk';
+                           : 'WASD or arrows to walk, drag to look';
   if (touch) stick.style.display = 'block';
+  armAudio();
 }
-hud.addEventListener('click', enter);
+setTimeout(enter, 1000);        // one second of welcome, then you're in
+
+// ---- keyboard walking (desktop) ----------------------------------------
+const keys = {};
+const SWALLOW = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'];
+addEventListener('keyup', e => { keys[e.code] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 
 // ---- mouse -------------------------------------------------------------
 function setNDC(cx, cy) {
@@ -1430,6 +1516,7 @@ canvas.addEventListener('click', e => {
   const hitTarget = pickTarget();
   if (hitTarget === 'jukebox') openPanel();
   else if (hitTarget === 'door') openExit();
+  else if (hitTarget === 'ejak') openChat();
 });
 
 canvas.addEventListener('wheel', e => {
@@ -1491,6 +1578,7 @@ canvas.addEventListener('touchend', e => {
       const tapped = pickTarget();
       if (tapped === 'jukebox') openPanel();
       else if (tapped === 'door') openExit();
+      else if (tapped === 'ejak') openChat();
     }
     lookId = null;
   }
@@ -1498,10 +1586,14 @@ canvas.addEventListener('touchend', e => {
 
 // ---- keys: just the two shortcuts --------------------------------------
 addEventListener('keydown', e => {
+  const typing = /^(INPUT|TEXTAREA)$/.test((document.activeElement || {}).tagName || '');
+  if (e.code === 'Escape') { closePanel(); closeExit(); closeChat(); return; }
+  if (typing) return;
+  if (SWALLOW.indexOf(e.code) >= 0) e.preventDefault();
+  keys[e.code] = true;
   if (e.repeat) return;
   if (e.code === 'KeyR') rainLive = !rainLive;
   if (e.code === 'KeyJ') panelOpen ? closePanel() : openPanel();
-  if (e.code === 'Escape' && panelOpen) { closePanel(); closeExit(); }
 });
 
 /* ----------------------------------------------------------------------
@@ -1766,6 +1858,7 @@ function createHologram(opt) {
   new THREE.TextureLoader().load(opt.src, tex => apply(tex.image, tex), undefined, placeholder);
 
   return {
+    group: g,
     update(elapsed, dt) {
       if (CLAMP > 0) {
         const want = Math.atan2(camera.position.x - g.position.x, camera.position.z - g.position.z);
@@ -2226,7 +2319,6 @@ buildAvatars();
    Looks for playlist.json beside this page (override with ?playlist=URL).
    Missing or broken manifest just means the file picker is the only source.
    ---------------------------------------------------------------------- */
-let AUTOPLAY = false;
 const PLAYLIST_URL = new URLSearchParams(location.search).get('playlist') || 'playlist.json';
 
 fetch(PLAYLIST_URL, { cache: 'no-cache' })
@@ -2242,16 +2334,26 @@ fetch(PLAYLIST_URL, { cache: 'no-cache' })
         url: new URL(base + file, root).href
       };
     }).filter(t => t.url);
-    AUTOPLAY = data.autoplay !== false;
+    if (data.chat) {
+      CHAT = data.chat;
+      // Ejak's character sheet lives in a markdown file you can edit any time;
+      // it rides along with every message rather than being baked into the page.
+      if (CHAT.persona) {
+        fetch(new URL(CHAT.persona, root).href, { cache: 'no-cache' })
+          .then(r => r.ok ? r.text() : Promise.reject(r.status))
+          .then(txt => { EJAK_MD = txt.slice(0, 12000); })
+          .catch(() => { EJAK_MD = ''; });
+      }
+    }
     if (data.exit) {
       EXIT_URL = data.exit.url || null;
       if (data.exit.label) EXIT_LABEL = data.exit.label;
     }
-    PLAYER.addRemote(list, AUTOPLAY);
+    PLAYER.addRemote(list, false);          // loaded and queued, but silent
     const src = document.getElementById('jb-src');
     if (!list.length) PLAYER.setStatus('playlist.json lists no tracks');
     if (src) src.textContent = list.length
-      ? list.length + ' track' + (list.length === 1 ? '' : 's') + ' on the machine'
+      ? list.length + ' tracks loaded \u2014 press play'
       : 'playlist.json is empty';
   })
   .catch(err => {
@@ -2278,24 +2380,23 @@ function closePanel() {
   jb.style.display = 'none';
 }
 
-// the panel can be dragged out of the way by its header
-(() => {
-  const head = document.querySelector('#jb .jb-head');
+// any panel can be dragged out of the way by its header
+function makeDraggable(panel, head) {
   let offX = 0, offY = 0, moving = false;
   function start(cx, cy) {
-    const r = jb.getBoundingClientRect();
-    jb.style.left = r.left + 'px';
-    jb.style.top = r.top + 'px';
-    jb.style.right = 'auto';
-    jb.style.transform = 'none';          // drop the centring so left/top take over
+    const r = panel.getBoundingClientRect();
+    panel.style.left = r.left + 'px';
+    panel.style.top = r.top + 'px';
+    panel.style.right = 'auto';
+    panel.style.transform = 'none';       // drop the centring so left/top take over
     offX = cx - r.left; offY = cy - r.top;
     moving = true;
   }
   function move(cx, cy) {
     if (!moving) return;
-    const w = jb.offsetWidth, h = jb.offsetHeight;
-    jb.style.left = Math.max(4, Math.min(innerWidth - w - 4, cx - offX)) + 'px';
-    jb.style.top  = Math.max(4, Math.min(innerHeight - h - 4, cy - offY)) + 'px';
+    const w = panel.offsetWidth, h = panel.offsetHeight;
+    panel.style.left = Math.max(4, Math.min(innerWidth - w - 4, cx - offX)) + 'px';
+    panel.style.top  = Math.max(4, Math.min(innerHeight - h - 4, cy - offY)) + 'px';
   }
   head.addEventListener('mousedown', e => {
     if (e.target.tagName === 'BUTTON') return;
@@ -2312,7 +2413,8 @@ function closePanel() {
     const t = e.changedTouches[0]; move(t.clientX, t.clientY);
   }, { passive: true });
   ['touchend', 'touchcancel'].forEach(ev => addEventListener(ev, () => { moving = false; }));
-})();
+}
+makeDraggable(jb, document.querySelector('#jb .jb-head'));
 
 document.getElementById('jb-close').addEventListener('click', closePanel);
 document.getElementById('jb-prev').addEventListener('click', () => PLAYER.prev());
@@ -2323,14 +2425,100 @@ document.getElementById('jb-vol').addEventListener('input', e => PLAYER.setVolum
 // what, if anything, is under the cursor and close enough to interact with
 function pickTarget() {
   raycaster.setFromCamera(mouseNDC, camera);
-  const hit = raycaster.intersectObjects([JUKEBOX.group, DOOR], true)[0];
+  const hit = raycaster.intersectObjects([JUKEBOX.group, DOOR, BARTENDER.group], true)[0];
   if (!hit || hit.distance > 5.0) return null;
   for (let o = hit.object; o; o = o.parent) {
     if (o === JUKEBOX.group) return 'jukebox';
     if (o === DOOR) return 'door';
+    if (o === BARTENDER.group) return 'ejak';
   }
   return null;
 }
+
+/* ----------------------------------------------------------------------
+   TALKING TO EJAK
+   The page posts the running conversation to whatever endpoint is named in
+   playlist.json and shows what comes back. Nothing is stored anywhere; the
+   history lives in this tab and dies with it.
+   ---------------------------------------------------------------------- */
+let CHAT = null;
+let EJAK_MD = '';          // contents of the markdown named in playlist.json
+const chatBox = document.getElementById('chat');
+const chatLog = document.getElementById('chat-log');
+const chatIn  = document.getElementById('chat-in');
+const chatHistory = [];
+let chatBusy = false, chatGreeted = false;
+makeDraggable(chatBox, document.querySelector('#chat .jb-head'));
+
+function chatSay(who, text, cls) {
+  const el = document.createElement('div');
+  el.className = 'msg ' + who + (cls ? ' ' + cls : '');
+  el.textContent = text;
+  chatLog.appendChild(el);
+  chatLog.scrollTop = chatLog.scrollHeight;
+  return el;
+}
+
+function openChat() {
+  if (panelOpen) return;
+  panelOpen = true;
+  chatBox.style.display = 'block';
+  prompt.style.display = 'none';
+  dragging = false;
+  if (!chatGreeted) {
+    chatGreeted = true;
+    if (!CHAT || !CHAT.url) {
+      chatSay('note', 'no chat endpoint set in playlist.json');
+    } else {
+      chatSay('ejak', CHAT.greeting || "What'll it be?");
+    }
+  }
+  setTimeout(() => chatIn.focus(), 30);
+}
+function closeChat() { panelOpen = false; chatBox.style.display = 'none'; chatIn.blur(); }
+document.getElementById('chat-close').addEventListener('click', closeChat);
+
+async function chatSend() {
+  const text = chatIn.value.trim();
+  if (!text || chatBusy) return;
+  if (!CHAT || !CHAT.url) { chatSay('note', 'no chat endpoint set'); return; }
+  chatIn.value = '';
+  chatSay('you', text);
+  chatHistory.push({ role: 'user', content: text });
+  chatBusy = true;
+  const bubble = chatSay('ejak', 'typing…', 'pending');
+  try {
+    const res = await fetch(CHAT.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: chatHistory.slice(),
+        context: EJAK_MD || CHAT.system || '',   // the markdown, verbatim
+        model: CHAT.model
+      })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const reply = data.reply
+      || (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content)
+      || '(empty reply)';
+    bubble.textContent = reply;
+    bubble.classList.remove('pending');
+    chatHistory.push({ role: 'assistant', content: reply });
+    if (chatHistory.length > 24) chatHistory.splice(0, chatHistory.length - 24);
+  } catch (err) {
+    bubble.textContent = 'line went dead — ' + err.message;
+    bubble.classList.remove('pending');
+    bubble.classList.add('err');
+  }
+  chatBusy = false;
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+document.getElementById('chat-send').addEventListener('click', chatSend);
+chatIn.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); chatSend(); }
+  e.stopPropagation();                      // R and J are shortcuts, not letters, in here
+});
 
 let EXIT_URL = null, EXIT_LABEL = 'Leave The Pub?';
 const exitBox = document.getElementById('exit');
@@ -2408,7 +2596,9 @@ function animate() {
     if (aim !== hovering) {
       hovering = aim;
       prompt.style.display = aim ? 'block' : 'none';
-      if (aim) prompt.textContent = aim === 'door' ? 'LEAVE THE PUB' : 'JUKEBOX \u2014 click';
+      if (aim) prompt.textContent = aim === 'door' ? 'LEAVE THE PUB'
+                                  : aim === 'ejak' ? 'TALK TO EJAK'
+                                  : 'JUKEBOX \u2014 click';
     }
     if (aim) {
       prompt.style.left = (lastPX + 18) + 'px';
@@ -2422,10 +2612,16 @@ function animate() {
   repaint += dt;
   if (repaint > 1 / 30) { paint(feeds[feedTurn++ % feeds.length], elapsed); repaint = 0; }
 
-  // walking comes from the thumbstick on touch and the wheel on desktop
-  const f = panelOpen ? 0 : move.f;
-  const s = panelOpen ? 0 : move.s;
-  const speed = 2.6;
+  // walking comes from the keyboard, the thumbstick, and the wheel
+  const kf = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
+  const ks = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
+  const f = panelOpen ? 0 : Math.max(-1, Math.min(1, move.f + kf));
+  const s = panelOpen ? 0 : Math.max(-1, Math.min(1, move.s + ks));
+  const speed = (keys.ShiftLeft || keys.ShiftRight) ? 4.6 : 2.6;
+
+  // Q and E still turn, for anyone who'd rather not drag
+  const turn = panelOpen ? 0 : (keys.KeyQ ? 1 : 0) - (keys.KeyE ? 1 : 0);
+  if (turn) yaw += turn * 1.7 * dt;
 
   const dir = new THREE.Vector3(
     Math.sin(yaw) * -f + Math.cos(yaw) * s,

@@ -1,9 +1,9 @@
 {
   "baseUrl": "tracks/",
   "chat": {
-    "url": "https://ejak.thill5523.workers.dev/",
+    "url": "https://pub-ejak.YOURNAME.workers.dev",
     "persona": "ejak.md",
-    "greeting": "Yo!"
+    "greeting": "Welcome to The Pub, want a beer?"
   },
   "exit": {
     "label": "Leave The Pub?",

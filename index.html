@@ -89,7 +89,12 @@
 
   /* ---- chat ---- */
   #chat { left:22px; top:50%; transform:translateY(-50%); width:344px; }
-  .chat-title { letter-spacing:.14em; font-size:12px; }
+  .chat-title { letter-spacing:.2em; font-size:13px; }
+  .chat-title em {
+    display:inline-block; margin-left:10px; font-style:normal;
+    font:400 9.5px/1 ui-monospace, Menlo, monospace;
+    letter-spacing:.14em; text-transform:none; color:#5f89a6;
+  }
   #chat-log {
     position:relative; height:288px; overflow-y:auto; padding:13px 14px 6px;
     display:flex; flex-direction:column; gap:9px;
@@ -158,8 +163,7 @@
   #exit-stay:hover { border-color:#8b7a63; }
   #exit-go[disabled] { opacity:.45; cursor:not-allowed; }
   /* Kept last on purpose: these rules have the same specificity as the desktop
-     ones above, so they only win by coming after them. That ordering is exactly
-     why the jukebox was still sitting mid-screen on phones. */
+     ones above, so they only win by coming after them. Keep them last. */
   @media (pointer: coarse), (max-width: 700px) {
     #chat { left:8px; right:8px; top:8px; bottom:auto; width:auto; transform:none; }
     #jb {
@@ -189,13 +193,16 @@
 <body>
 <div id="hud"><div class="panel">
   <h1>WELCOME TO THE PUB</h1>
-  <p>every game &middot; every night</p>
+  <p>grab a beer</p>
 </div></div>
 <div id="hint">esc to release the mouse</div>
 <div id="stats"></div>
 
 <div id="chat">
-  <div class="jb-head chat-title"><span>EJAK &mdash; Electronic Jak</span><button id="chat-close" title="close">&#10005;</button></div>
+  <div class="jb-head chat-title">
+    <span>E-JAK<em>Electronic Jak</em></span>
+    <button id="chat-close" title="close">&#10005;</button>
+  </div>
   <div id="chat-log"></div>
   <div class="chat-row">
     <input id="chat-in" type="text" placeholder="say something&hellip;" autocomplete="off">
@@ -400,7 +407,6 @@ const mat = {
 const glow  = new THREE.MeshBasicMaterial({ color: RED });
 const glowV = new THREE.MeshBasicMaterial({ color: BLUE });
 const glowM = new THREE.MeshBasicMaterial({ color: WHITE });
-const glowA = new THREE.MeshBasicMaterial({ color: AMBER });
 
 const BOTTLE_COLORS = ['#e8a14a', '#7fbf6a', '#d4483f', '#5f9fe0', '#e6d8a8', '#b06cff'];
 
@@ -639,8 +645,8 @@ TABLES.forEach(([x, z]) => table(x, z));
 const BOOTH_W = 1.9, BOOTH_D = 1.7;   // width along the wall, depth out from it
 
 const BOOTH_GROUPS = [];
-// Two lamps instead of four: booth 3 covers the whole right wall, booth 6 the
-// left and the doorway. Every point light is paid for on every lit pixel.
+// Booth 3 lights the whole right wall, booth 6 the left and the doorway.
+// Every point light is paid for on every lit pixel, so there are only two.
 const BOOTH_LAMPS = touch ? [3] : [3, 6];
 function booth(x, z, ry, i, sides) {
   const g = new THREE.Group();
@@ -657,9 +663,7 @@ function booth(x, z, ry, i, sides) {
   strip(1.09, 0.014, 0.84, accent, 0, 0.702, -0.1, g);
   cyl(0.06, 0.06, 0.74, mat.dark, 0, 0.37, -0.1, 10, g);
   cyl(0.30, 0.30, 0.04, mat.dark, 0, 0.03, -0.1, 14, g);
-  // Four lamps placed so every booth is covered: 3 sits between 2 and 4 on the
-  // right wall, 0 reaches 1 on the left, and the two entry booths are far apart
-  // enough to need their own. The corner is left dark on purpose - Strider's.
+  // The corner booth is left dark on purpose - it is Strider's.
   if (BOOTH_LAMPS.indexOf(i) >= 0) {
     const lamp = new THREE.PointLight(0xffc48a, 2.1, 7.5, 2);
     lamp.position.set(0, 1.62, -0.1);
@@ -1289,38 +1293,6 @@ feeds.forEach(f => paint(f, 0));
 scene.add(new THREE.AmbientLight(0x161a22, 0.38));
 scene.add(new THREE.HemisphereLight(0x1e2733, 0x07070a, 0.26));
 
-function pendant(x, z, intensity, shadow, color) {
-  const g = new THREE.Group();
-  cyl(0.01, 0.01, 0.9, mat.dark, 0, H - 0.45, 0, 6, g);
-  cyl(0.34, 0.34, 0.05, mat.shell, 0, H - 0.95, 0, 24, g);
-  const ring = new THREE.Mesh(
-    new THREE.RingGeometry(0.16, 0.32, 28),
-    new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide })
-  );
-  ring.rotation.x = Math.PI / 2;
-  ring.position.y = H - 0.98;
-  g.add(ring);
-  const light = new THREE.PointLight(color, intensity, 12, 2);
-  light.position.y = H - 1.05;
-  g.add(light);
-  g.position.set(x, 0, z);
-  scene.add(g);
-}
-// nothing hangs over the bar any more - it is lit from concealed sources
-
-// two concealed washes down the length of the counter
-[-2.8, 2.8].forEach(dx => {
-  const w = new THREE.PointLight(0xc4d8ec, 2.0, 7.5, 2);
-  w.position.set(barX + dx, 2.25, BAR_Z + 0.15);
-  scene.add(w);
-});
-
-// warm backlight behind the bottles, the one warm note left in the room
-// the right-hand round table lost its pendant, so light it with no fixture
-const tableGlow = new THREE.PointLight(0xffc48a, 1.1, 4.0, 2);
-tableGlow.position.set(3.6, 2.15, 1.8);
-scene.add(tableGlow);
-
 const backGlow = new THREE.PointLight(0xffa347, 2.0, 7.5, 2);
 backGlow.position.set(barX, 1.9, BACK_Z + 0.5);
 scene.add(backGlow);
@@ -1482,7 +1454,6 @@ let jbOpen = false, chatOpen = false, exitOpen = false;
 let panelOpen = false;      // true when any panel is showing
 const syncPanels = () => { panelOpen = jbOpen || chatOpen || exitOpen; };
 let dragging = false, lastX = 0, lastY = 0, downX = 0, downY = 0, slip = 0;
-let lastPX = 0, lastPY = 0;         // cursor position, for the hover label
 const mouseNDC = new THREE.Vector2(0, 0);
 let scrollStep = 0;
 
@@ -1528,7 +1499,6 @@ canvas.addEventListener('mousedown', e => {
 addEventListener('mousemove', e => {
   bump();
   setNDC(e.clientX, e.clientY);
-  lastPX = e.clientX; lastPY = e.clientY;
   if (!dragging) return;
   yaw   += (e.clientX - lastX) * radPerPxX;
   pitch += (e.clientY - lastY) * radPerPxY;
@@ -1785,10 +1755,9 @@ function createHologram(opt) {
       aura.position.y = BASE + HEIGHT / 2;
     }
   }
-  // A colour key can only ask "is this pixel near the backdrop colour", so any
-  // dark clothing reads as backdrop and goes half-transparent. Flood filling
-  // inward from the border only removes background actually connected to the
-  // edge, so the inside of the figure stays fully opaque whatever its colours.
+  // Used only for images with no alpha of their own. A plain colour key turns
+  // any dark clothing half-transparent, so instead this floods inward from the
+  // border and removes only background actually connected to the edge.
   function floodCutout(img) {
     const MAX = 900;                                   // cap the work on big photos
     const sc = Math.min(1, MAX / Math.max(img.width, img.height));
@@ -1977,12 +1946,8 @@ const PATRON = createHologram({
   parallax: 0.045,
   opacity: 1.0,            // fully solid, not a see-through projection
   solid: true,
-  // gain and gamma were propping up a murky jpg. A clean png needs no help,
-  // so these dim it back down instead of lifting it.
-  gain: 0.60, gamma: 1.10,
-  // The rim light traces wherever alpha changes. On a hand-cut png that edge is
-  // razor sharp, so it came out as a white outline rather than a soft glow.
-  rim: 0,
+  gain: 0.60, gamma: 1.10,   // his png is already bright; these bring it down
+  rim: 0,                    // a hand-cut alpha edge is too sharp for a rim light
   sweep: 0,                // no rising band travelling up him
   fx: 1.0,                 // scanlines, sweep, glitch bands and flicker all back
   fade: 0,                 // still no dissolve across his lap
@@ -2029,7 +1994,6 @@ function holoMaterial(color, intensity) {
 }
 
 const avatars = [];
-const AV_COLORS = ["#5fe9ff", "#8ff7ff", "#b98cff", "#ff6ed2", "#3dffaa"];
 const avMats = [];
 const avMatByColor = {};
 const AV = {
@@ -2043,8 +2007,7 @@ const AV = {
   foam:  new THREE.CylinderGeometry(0.048, 0.048, 0.032, 10).translate(0, 0.155, 0)
 };
 const BEER_MAT = holoMaterial('#ffb347', 0.9);
-const FOAM_MAT = holoMaterial('#fff4dc', 0.85);
-avMats.push(BEER_MAT, FOAM_MAT);
+avMats.push(BEER_MAT);
 
 function makeAvatar(color, opt) {
   opt = opt || {};
@@ -2540,7 +2503,7 @@ function chatSay(who, text, cls) {
   if (who !== 'note') {
     const label = document.createElement('div');
     label.className = 'msg-label';
-    label.textContent = who === 'ejak' ? 'EJAK' : 'YOU';
+    label.textContent = who === 'ejak' ? 'E-JAK' : 'YOU';
     wrap.appendChild(label);
   }
   const el = document.createElement('div');
@@ -2562,7 +2525,7 @@ function openChat() {
     if (!CHAT || !CHAT.url) {
       chatSay('note', 'no chat endpoint set in playlist.json');
     } else {
-      chatSay('ejak', CHAT.greeting || "What'll it be?");
+      chatSay('ejak', CHAT.greeting || 'Welcome to The Pub, want a beer?');
     }
   }
   setTimeout(() => chatIn.focus(), 30);
@@ -2665,7 +2628,6 @@ scene.traverse(o => { if (o.isLight && o.isPointLight) lightCount++; });
 
 let elapsed = 0, repaint = 0, rainTick = 0, hoverTick = 0, feedTurn = 0;
 let frameAvg = 1 / 60, adaptTick = 0;
-let hovering = false;
 
 function animate() {
   requestAnimationFrame(animate);

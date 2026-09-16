@@ -1969,12 +1969,12 @@ const PATRON = createHologram({
   clamp: 0,                // never turns
   parallax: 0.045,
   opacity: 1.0,            // fully solid, not a see-through projection
-  solid: true,             // snap the keyed alpha so the wall can't show through
-  keyTol: 0.13,            // dark photo: keep the fill from bleeding into him
-  gain: 1.85, gamma: 0.70, // lift the shadows so his face isn't a silhouette
-  fx: 0.2,                 // almost no scanline, sweep, glitch or flicker
-  fade: 0,                 // no dissolve across his lap
-  aura: false,             // the additive halo was washing him out
+  solid: true,
+  // gain and gamma were propping up a murky jpg. A clean png needs no help,
+  // so these dim it back down instead of lifting it.
+  gain: 0.90, gamma: 1.06,
+  fx: 1.0,                 // scanlines, sweep, glitch bands and flicker all back
+  fade: 0,                 // still no dissolve across his lap
   pool: false, lamp: false,
   placeholder: 'sit'
 });

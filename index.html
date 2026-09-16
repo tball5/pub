@@ -2507,7 +2507,12 @@ async function chatSend() {
     chatHistory.push({ role: 'assistant', content: reply });
     if (chatHistory.length > 24) chatHistory.splice(0, chatHistory.length - 24);
   } catch (err) {
-    bubble.textContent = 'line went dead — ' + err.message;
+    // "Failed to fetch" means the browser blocked it before any reply arrived:
+    // wrong URL, or CORS. Say which, rather than showing a bare browser string.
+    const hint = /fetch/i.test(err.message)
+      ? 'could not reach the bar — check chat.url in playlist.json, and that this site is listed in ALLOWED_ORIGINS'
+      : err.message;
+    bubble.textContent = 'line went dead — ' + hint;
     bubble.classList.remove('pending');
     bubble.classList.add('err');
   }
